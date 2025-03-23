@@ -40,4 +40,9 @@ def calculate_savings(db: Session, user_id: int):
 # Create a function to query the view to see the financial report/summary
 
 
+def get_financial_report(db: Session, user_id: int):
+    return db.execute(
+        text("SELECT * FROM financial_summary WHERE user_id = :user_id"),
+        {"user_id": user_id}
+    ).fetchone()
 
