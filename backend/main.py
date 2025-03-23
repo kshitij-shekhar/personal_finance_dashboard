@@ -34,3 +34,18 @@ def create_expense(expense: schemas.ExpenseCreate, db: Session = Depends(get_db)
 @app.get("/expenses/{user_id}", response_model=list[schemas.Expense])
 def read_expenses(user_id: int, db: Session = Depends(get_db)):
     return crud.get_expenses_by_user(db=db, user_id=user_id)
+
+
+@app.post("/calculate-savings/{user_id}")
+def trigger_savings_calculation(user_id: int, db: Session = Depends(get_db)):
+    success = crud.calculate_savings(db, user_id)
+    return {"status": "success" if success else "error"}
+
+@app.get("/financial-report/{user_id}")
+def get_financial_report(user_id: int, db: Session = Depends(get_db)):
+    report = crud.get_financial_report(db, user_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return report
+
+

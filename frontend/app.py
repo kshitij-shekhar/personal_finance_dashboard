@@ -49,3 +49,24 @@ if st.button("Show Expenses"):
             st.write(expense)
     else:
         st.error("Error fetching expenses.")
+
+# Savings Calculation Section
+st.header("Savings Calculator")
+if st.button("Calculate Monthly Savings"):
+    response = requests.post(f"http://localhost:8000/calculate-savings/{user_id}")
+    if response.json()["status"] == "success":
+        st.success("Savings updated!")
+    else:
+        st.error("Calculation failed")
+
+# Display Financial Report
+st.header("Financial Report")
+if st.button("Generate Report"):
+    report = requests.get(f"http://localhost:8000/financial-report/{user_id}").json()
+    
+    st.write(f"User: {report['username']}")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Income", f"${report['total_income']}")
+    col2.metric("Total Expenses", f"${report['total_expenses']}")
+    col3.metric("Net Savings", f"${report['net_savings']}")
+
