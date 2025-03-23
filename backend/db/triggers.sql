@@ -23,4 +23,4 @@ AFTER UPDATE ON expenses
 FOR EACH ROW EXECUTE PROCEDURE log_expense_changes();
 
 -- run the following in the command line to apply triggers.sql to the db
--- psql -U your_username -d db_name -a -f backend/database/triggers.sql
+-- psql -U your_username -d db_name -a -f backend/db/triggers.sql

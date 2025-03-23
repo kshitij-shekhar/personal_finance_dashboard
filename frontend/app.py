@@ -70,3 +70,24 @@ if st.button("Generate Report"):
     col2.metric("Total Expenses", f"${report['total_expenses']}")
     col3.metric("Net Savings", f"${report['net_savings']}")
 
+
+
+#incorporate functions.sql
+
+# Total Expenses Section
+st.header("Total Expenses")
+if st.button("Get Total Expenses"):
+    response = requests.get(f"http://localhost:8000/total-expenses/{user_id}")
+    st.write(f"Total Expenses: ${response.json()['total_expenses']}")
+
+# Total Income Section
+st.header("Total Income")
+if st.button("Get Total Income"):
+    response = requests.get(f"http://localhost:8000/total-income/{user_id}")
+    st.write(f"Total Income: ${response.json()['total_income']}")
+
+# Net Savings Section
+st.header("Net Savings")
+if st.button("Get Net Savings"):
+    response = requests.get(f"http://localhost:8000/net-savings/{user_id}")
+    st.write(f"Net Savings: ${response.json()['net_savings']}")

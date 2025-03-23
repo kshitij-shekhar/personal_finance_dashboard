@@ -22,4 +22,4 @@ END;
 $$;
 
 -- Run in command line to apply to db
---psql -U your_username -d db_name -a -f backend/database/procedures.sql
+--psql -U your_username -d db_name -a -f backend/db/procedures.sql

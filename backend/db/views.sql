@@ -15,4 +15,4 @@ LEFT JOIN savings_goals sg ON u.id = sg.user_id
 GROUP BY u.id, sg.goal_amount, sg.current_amount;
 
 -- run the following to apply this view to the database
--- psql -U <your_username> -d <name_of_db> -a -f backend/database/views.sql
+-- psql -U <your_username> -d <name_of_db> -a -f backend/db/views.sql

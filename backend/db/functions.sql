@@ -41,4 +41,4 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- psql -U your_username -d db_name -a -f backend/database/functions.sql
+-- psql -U your_username -d db_name -a -f backend/db/functions.sql
