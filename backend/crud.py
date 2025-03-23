@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from . import models, schemas
+import models, schemas
 
 def create_user(db: Session, user: schemas.UserCreate):
     db_user = models.User(username=user.username, password=user.password)  # Hash password in production!
