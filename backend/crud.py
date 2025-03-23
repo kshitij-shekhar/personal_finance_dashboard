@@ -46,3 +46,26 @@ def get_financial_report(db: Session, user_id: int):
         {"user_id": user_id}
     ).fetchone()
 
+# Incorporate functions.sql : 
+
+
+def get_total_expenses(db: Session, user_id: int):
+    result = db.execute(
+        text("SELECT get_total_expenses(:user_id) AS total"),
+        {"user_id": user_id}
+    ).fetchone()
+    return result.total if result else 0
+
+def get_total_income(db: Session, user_id: int):
+    result = db.execute(
+        text("SELECT get_total_income(:user_id) AS total"),
+        {"user_id": user_id}
+    ).fetchone()
+    return result.total if result else 0
+
+def get_net_savings(db: Session, user_id: int):
+    result = db.execute(
+        text("SELECT get_net_savings(:user_id) AS net_savings"),
+        {"user_id": user_id}
+    ).fetchone()
+    return result.net_savings if result else 0
