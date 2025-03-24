@@ -49,19 +49,40 @@ def get_financial_report(user_id: int, db: Session = Depends(get_db)):
     return report
 
 # Endpoints for functions.sql
+# @app.get("/total-expenses/{user_id}")
+# def read_total_expenses(user_id: int, db: Session = Depends(get_db)):
+#     total_expenses = crud.get_total_expenses(db, user_id)
+#     return {"total_expenses": total_expenses}
+
 @app.get("/total-expenses/{user_id}")
 def read_total_expenses(user_id: int, db: Session = Depends(get_db)):
-    total_expenses = crud.get_total_expenses(db, user_id)
-    return {"total_expenses": total_expenses}
+    try:
+        total_expenses = crud.get_total_expenses(db, user_id)
+        return {"total_expenses": total_expenses}
+    except Exception as e:
+        return {"error": str(e)}
 
+
+# @app.get("/total-income/{user_id}")
+# def read_total_income(user_id: int, db: Session = Depends(get_db)):
+#     total_income = crud.get_total_income(db, user_id)
+#     return {"total_income": total_income}
 @app.get("/total-income/{user_id}")
 def read_total_income(user_id: int, db: Session = Depends(get_db)):
-    total_income = crud.get_total_income(db, user_id)
-    return {"total_income": total_income}
+    try:
+        total_income = crud.get_total_income(db, user_id)
+        return {"total_income": total_income}
+    except Exception as e:
+        return {"error": str(e)}  # Return error message in JSON format
+
 
 @app.get("/net-savings/{user_id}")
 def read_net_savings(user_id: int, db: Session = Depends(get_db)):
-    net_savings = crud.get_net_savings(db, user_id)
-    return {"net_savings": net_savings}
+    try:
+        net_savings = crud.get_net_savings(db, user_id)
+        return {"net_savings": net_savings}
+    except Exception as e:
+        return {"error": str(e)}  # Return error message in JSON format
+
 
 

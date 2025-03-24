@@ -49,23 +49,56 @@ def get_financial_report(db: Session, user_id: int):
 # Incorporate functions.sql : 
 
 
+# def get_total_expenses(db: Session, user_id: int):
+#     result = db.execute(
+#         text("SELECT get_total_expenses(:user_id) AS total"),
+#         {"user_id": user_id}
+#     ).fetchone()
+#     return result.total if result else 0
+
+
 def get_total_expenses(db: Session, user_id: int):
-    result = db.execute(
-        text("SELECT get_total_expenses(:user_id) AS total"),
-        {"user_id": user_id}
-    ).fetchone()
-    return result.total if result else 0
+    try:
+        result = db.execute(
+            text("SELECT get_total_expenses(:user_id) AS total"),
+            {"user_id": user_id}
+        ).fetchone()
+        return result.total if result else 0
+    except Exception as e:
+        print(f"Error fetching total expenses: {e}")
+        return 0
+
+
+# def get_total_income(db: Session, user_id: int):
+#     result = db.execute(
+#         text("SELECT get_total_income(:user_id) AS total"),
+#         {"user_id": user_id}
+#     ).fetchone()
+#     return result.total if result else 0
 
 def get_total_income(db: Session, user_id: int):
-    result = db.execute(
-        text("SELECT get_total_income(:user_id) AS total"),
-        {"user_id": user_id}
-    ).fetchone()
-    return result.total if result else 0
+    try:
+        result = db.execute(
+            text("SELECT get_total_income(:user_id) AS total"),
+            {"user_id": user_id}
+        ).fetchone()
+        
+        return result.total if result and result.total is not None else 0  # Return 0 if no result or total is None
+    except Exception as e:
+        print(f"Error fetching total income: {e}")
+        return 0  # Return 0 on error
+
+
 
 def get_net_savings(db: Session, user_id: int):
-    result = db.execute(
-        text("SELECT get_net_savings(:user_id) AS net_savings"),
-        {"user_id": user_id}
-    ).fetchone()
-    return result.net_savings if result else 0
+    try:
+        result = db.execute(
+            text("SELECT get_net_savings(:user_id_param) AS net_savings"),
+            {"user_id_param": user_id}  # Use the updated parameter name
+        ).fetchone()
+        
+        return result.net_savings if result and result.net_savings is not None else 0  # Return 0 if no result or net_savings is None
+    except Exception as e:
+        print(f"Error fetching net savings: {e}")
+        return 0  # Return 0 on error
+
