@@ -48,13 +48,15 @@ CREATE OR REPLACE FUNCTION get_expense_breakdown(user_id_param INT)
 RETURNS TABLE(category TEXT, total DECIMAL) AS $$
 BEGIN
     RETURN QUERY
-    SELECT category, COALESCE(SUM(amount), 0) AS total
-    FROM expenses
-    WHERE user_id = user_id_param
-    GROUP BY category
-    ORDER BY total DESC;  
+    SELECT e.category::TEXT, COALESCE(SUM(e.amount), 0) AS total  -- Cast to TEXT
+    FROM expenses e
+    WHERE e.user_id = user_id_param
+    GROUP BY e.category
+    ORDER BY total DESC;
 END;
 $$ LANGUAGE plpgsql;
+
+
 
 
 

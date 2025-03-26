@@ -97,9 +97,9 @@ def get_expense_breakdown(db: Session, user_id: int):
             text("SELECT * FROM get_expense_breakdown(:user_id_param)"),
             {"user_id_param": user_id}
         ).fetchall()
-    
+        
         return [{"category": row.category, "total": row.total} for row in result]
     except Exception as e:
-        print(f"Error fetching net savings: {e}")
-        return 0  # Return 0 on error
+        print(f"Error fetching expense breakdown: {e}")
+        return []
 

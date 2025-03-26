@@ -11,7 +11,8 @@ if 'show_sections' not in st.session_state:
         'financial_report': False,
         'total_expenses': False,
         'total_income': False,
-        'net_savings': False
+        'net_savings': False,
+        'expense_breakdown':False
     }
 
 def toggle_section(section_name):
@@ -200,13 +201,18 @@ with st.container():
         
         if response.status_code == 200:
             try:
-                data = response.json()  # Attempt to parse JSON
-                for category in data['categories']:
-                    st.write(f"{category['name']}: ${category['total']}")
+                data = response.json()
+                # Check if data['categories'] is a list before iterating
+                if isinstance(data.get('categories', []), list):
+                    for category in data['categories']:
+                        st.write(f"{category['category']}: ${category['total']}")  # Use 'category' instead of 'name'
+                else:
+                    st.error("Invalid data format received.")
             except requests.exceptions.JSONDecodeError:
                 st.error("Failed to decode JSON from server response.")
         else:
             st.error(f"Error fetching expense breakdown: {response.status_code}")
+
 
        
 
