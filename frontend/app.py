@@ -208,6 +208,5 @@ with st.container():
         else:
             st.error(f"Error fetching expense breakdown: {response.status_code}")
 
-        if st.button("Close Expense Breakdown"):
-            toggle_section('expense_breakdown')
+       
 

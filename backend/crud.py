@@ -48,15 +48,6 @@ def get_financial_report(db: Session, user_id: int):
 
 # Incorporate functions.sql : 
 
-
-# def get_total_expenses(db: Session, user_id: int):
-#     result = db.execute(
-#         text("SELECT get_total_expenses(:user_id) AS total"),
-#         {"user_id": user_id}
-#     ).fetchone()
-#     return result.total if result else 0
-
-
 def get_total_expenses(db: Session, user_id: int):
     try:
         result = db.execute(
@@ -69,12 +60,6 @@ def get_total_expenses(db: Session, user_id: int):
         return 0
 
 
-# def get_total_income(db: Session, user_id: int):
-#     result = db.execute(
-#         text("SELECT get_total_income(:user_id) AS total"),
-#         {"user_id": user_id}
-#     ).fetchone()
-#     return result.total if result else 0
 
 def get_total_income(db: Session, user_id: int):
     try:
@@ -103,17 +88,18 @@ def get_net_savings(db: Session, user_id: int):
         return 0  # Return 0 on error
 
 
+
+
+
 def get_expense_breakdown(db: Session, user_id: int):
-    result = db.execute(
-        text("""
-            SELECT category, COALESCE(SUM(amount), 0) AS total
-            FROM expenses
-            WHERE user_id = :user_id
-            GROUP BY category
-            ORDER BY total DESC
-        """),
-        {"user_id": user_id}
-    ).fetchall()
+    try:
+        result = db.execute(
+            text("SELECT * FROM get_expense_breakdown(:user_id_param)"),
+            {"user_id_param": user_id}
+        ).fetchall()
     
-    return [{"name": row.category, "total": row.total} for row in result]
+        return [{"category": row.category, "total": row.total} for row in result]
+    except Exception as e:
+        print(f"Error fetching net savings: {e}")
+        return 0  # Return 0 on error
 

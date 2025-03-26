@@ -43,4 +43,19 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+-- Function to calculate expense breakdown by category
+CREATE OR REPLACE FUNCTION get_expense_breakdown(user_id_param INT)
+RETURNS TABLE(category TEXT, total DECIMAL) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT category, COALESCE(SUM(amount), 0) AS total
+    FROM expenses
+    WHERE user_id = user_id_param
+    GROUP BY category
+    ORDER BY total DESC;  
+END;
+$$ LANGUAGE plpgsql;
+
+
+
 -- psql -U your_username -d db_name -a -f backend/db/functions.sql
