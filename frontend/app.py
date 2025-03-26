@@ -36,8 +36,7 @@ with st.container():
             st.success("User created successfully!")
         else:
             st.error("Error creating user.")
-        # if st.button("Close Registration Result"):
-        #     toggle_section('register')
+
 
 # Expense Input Section
 with st.container():
@@ -62,8 +61,7 @@ with st.container():
             st.success("Expense added successfully!")
         else:
             st.error("Error adding expense.")
-        # if st.button("Close Expense Result"):
-        #     toggle_section('add_expense')
+
 
 # View Expenses Section
 with st.container():
@@ -79,8 +77,7 @@ with st.container():
                 st.write(expense)
         else:
             st.error("Error fetching expenses.")
-        # if st.button("Close Expenses List"):
-        #     toggle_section('view_expenses')
+
 
 # Savings Calculator Section
 with st.container():
@@ -94,8 +91,7 @@ with st.container():
             st.success("Savings updated!")
         else:
             st.error("Calculation failed")
-        # if st.button("Close Savings Calculator"):
-        #     toggle_section('savings')
+
 
 # Financial Report Section
 with st.container():
@@ -110,8 +106,7 @@ with st.container():
         col1.metric("Total Income", f"${report['total_income']}")
         col2.metric("Total Expenses", f"${report['total_expenses']}")
         col3.metric("Net Savings", f"${report['net_savings']}")
-        # if st.button("Close Report"):
-        #     toggle_section('financial_report')
+
 
 
 # Total Expenses Section
@@ -184,9 +179,7 @@ with st.container():
         else:
             st.error(f"Error fetching net savings: {response.status_code}")
 
-        # Add a button to close the section
-        if st.button("Close Net Savings"):
-            toggle_section('net_savings')
+        
 
 
 
@@ -205,7 +198,7 @@ with st.container():
                 # Check if data['categories'] is a list before iterating
                 if isinstance(data.get('categories', []), list):
                     for category in data['categories']:
-                        st.write(f"{category['category']}: ${category['total']}")  # Use 'category' instead of 'name'
+                        st.write(f"{category['category']}: ${category['total']}") 
                 else:
                     st.error("Invalid data format received.")
             except requests.exceptions.JSONDecodeError:
