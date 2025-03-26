@@ -22,5 +22,15 @@ CREATE TRIGGER expense_update_trigger
 AFTER UPDATE ON expenses
 FOR EACH ROW EXECUTE PROCEDURE log_expense_changes();
 
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
 -- run the following in the command line to apply triggers.sql to the db
 -- psql -U your_username -d db_name -a -f backend/db/triggers.sql

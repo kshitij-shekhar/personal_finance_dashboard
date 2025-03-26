@@ -12,7 +12,12 @@ if 'show_sections' not in st.session_state:
         'total_expenses': False,
         'total_income': False,
         'net_savings': False,
-        'expense_breakdown':False
+        'expense_breakdown':False,
+        'financial_summary':False,
+        'budget':False,
+        'savings_recommendations':False,
+        'financial_health':False
+
     }
 
 def toggle_section(section_name):
@@ -93,19 +98,19 @@ with st.container():
             st.error("Calculation failed")
 
 
-# Financial Report Section
-with st.container():
-    st.header("Financial Report")
-    if st.button("Generate Report"):
-        toggle_section('financial_report')
+# # Financial Report Section
+# with st.container():
+#     st.header("Financial Report")
+#     if st.button("Generate Report"):
+#         toggle_section('financial_report')
     
-    if st.session_state.show_sections['financial_report']:
-        report = requests.get(f"http://localhost:8000/financial-report/{user_id}").json()
-        st.write(f"User: {report['username']}")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Income", f"${report['total_income']}")
-        col2.metric("Total Expenses", f"${report['total_expenses']}")
-        col3.metric("Net Savings", f"${report['net_savings']}")
+#     if st.session_state.show_sections['financial_report']:
+#         report = requests.get(f"http://localhost:8000/financial-report/{user_id}").json()
+#         st.write(f"User: {report['username']}")
+#         col1, col2, col3 = st.columns(3)
+#         col1.metric("Total Income", f"${report['total_income']}")
+#         col2.metric("Total Expenses", f"${report['total_expenses']}")
+#         col3.metric("Net Savings", f"${report['net_savings']}")
 
 
 
@@ -207,5 +212,122 @@ with st.container():
             st.error(f"Error fetching expense breakdown: {response.status_code}")
 
 
-       
+with st.container():
+    st.header("Financial Summary Dashboard")
+    if st.button("Show Financial Summary"):
+        toggle_section('financial_summary')
 
+    if st.session_state.show_sections['financial_summary']:
+        response = requests.get(f"http://localhost:8000/financial-summary/{user_id}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(data)
+            st.write(f"Username: {data['username']}")
+            st.write(f"Savings Goal: ${data['savings_goal']}")
+            st.write(f"Current Savings: ${data['current_savings']}")
+            st.write(f"Savings Progress: {data['savings_progress_percentage']}%")
+            st.write(f"Expense-to-Income Ratio: {data['expense_to_income_ratio']}%")
+        else:
+            st.error(f"Error fetching financial summary: {response.status_code}")
+
+        if st.button("Close Financial Summary"):
+            toggle_section('financial_summary')
+
+
+
+
+        
+# with st.container():
+#     st.header("Budgeting Tool")
+#     if st.button("Show Budgets"):
+#         toggle_section('budget')
+
+#     if st.session_state.show_sections['budget']:
+#         response = requests.get(f"http://localhost:8000/budget/{user_id}")
+        
+#         if response.status_code == 200:
+#             data = response.json()
+#             for budget in data['budgets']:
+#                 st.write(f"{budget['category']}: ${budget['budget']}")
+#         else:
+#             st.error(f"Error fetching budgets: {response.status_code}")
+
+        
+with st.container():
+    st.header("Savings Recommendations")
+    if st.button("Get Recommendations"):
+        toggle_section('savings_recommendations')
+
+    if st.session_state.show_sections['savings_recommendations']:
+        response = requests.get(f"http://localhost:8000/savings-recommendations/{user_id}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            st.write(data['recommendation'])
+        else:
+            st.error(f"Error fetching recommendations: {response.status_code}")
+
+        if st.button("Close Recommendations"):
+            toggle_section('savings_recommendations')
+
+
+
+
+with st.container():
+    st.header("Monthly Financial Health Check")
+    if st.button("Check Financial Health"):
+        toggle_section('financial_health')
+
+    if st.session_state.show_sections['financial_health']:
+        response = requests.get(f"http://localhost:8000/financial-health-score/{user_id}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            st.write(f"Your Financial Health Score is: {data['score']}")
+        else:
+            st.error(f"Error fetching financial health score: {response.status_code}")
+
+        if st.button("Close Financial Health Check"):
+            toggle_section('financial_health')
+
+
+with st.container():
+    st.header("Budgeting Tool")
+    
+    # Create a new budget
+    st.subheader("Create New Budget")
+    category = st.text_input("Category")
+    amount = st.number_input("Budget Amount", min_value=0.0)
+    
+    if st.button("Create Budget"):
+        response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": category, "budget_amount": amount})
+        if response.status_code == 200:
+            st.success("Budget created successfully!")
+        else:
+            st.error("Error creating budget.")
+    
+    # View existing budgets
+    if st.button("View Budgets"):
+        response = requests.get(f"http://localhost:8000/budgets/{user_id}")
+        if response.status_code == 200:
+            data = response.json()
+            for budget in data['budgets']:
+                st.write(f"Category: {budget['category']}, Amount: ${budget['budget_amount']}")
+                # Optionally add update and delete buttons here for each budget entry
+                if st.button(f"Update Budget for {budget['category']}"):
+                    new_amount = st.number_input(f"New Amount for {budget['category']}", min_value=0.0)
+                    update_response = requests.put(f"http://localhost:8000/budgets/{budget['id']}", json={"budget_amount": new_amount})
+                    if update_response.status_code == 200:
+                        st.success("Budget updated successfully!")
+                    else:
+                        st.error("Error updating budget.")
+
+                if st.button(f"Delete Budget for {budget['category']}"):
+                    delete_response = requests.delete(f"http://localhost:8000/budgets/{budget['id']}")
+                    if delete_response.status_code == 200:
+                        st.success("Budget deleted successfully!")
+                    else:
+                        st.error("Error deleting budget.")
+        else:
+            st.error("Error fetching budgets.")

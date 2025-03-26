@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 import models, schemas, crud
 from database import SessionLocal, engine
 
+
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
 
@@ -41,18 +42,14 @@ def trigger_savings_calculation(user_id: int, db: Session = Depends(get_db)):
     success = crud.calculate_savings(db, user_id)
     return {"status": "success" if success else "error"}
 
-@app.get("/financial-report/{user_id}")
-def get_financial_report(user_id: int, db: Session = Depends(get_db)):
-    report = crud.get_financial_report(db, user_id)
-    if report is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return report
+# @app.get("/financial-report/{user_id}")
+# def get_financial_report(user_id: int, db: Session = Depends(get_db)):
+#     report = crud.get_financial_report(db, user_id)
+#     if report is None:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     return report
 
-# Endpoints for functions.sql
-# @app.get("/total-expenses/{user_id}")
-# def read_total_expenses(user_id: int, db: Session = Depends(get_db)):
-#     total_expenses = crud.get_total_expenses(db, user_id)
-#     return {"total_expenses": total_expenses}
+
 
 @app.get("/total-expenses/{user_id}")
 def read_total_expenses(user_id: int, db: Session = Depends(get_db)):
@@ -63,10 +60,7 @@ def read_total_expenses(user_id: int, db: Session = Depends(get_db)):
         return {"error": str(e)}
 
 
-# @app.get("/total-income/{user_id}")
-# def read_total_income(user_id: int, db: Session = Depends(get_db)):
-#     total_income = crud.get_total_income(db, user_id)
-#     return {"total_income": total_income}
+
 @app.get("/total-income/{user_id}")
 def read_total_income(user_id: int, db: Session = Depends(get_db)):
     try:
@@ -91,6 +85,54 @@ def read_expense_breakdown(user_id: int, db: Session = Depends(get_db)):
     return {"categories": expense_breakdown}
 
 
+@app.get("/financial-summary/{user_id}")
+def read_financial_summary(user_id: int, db: Session = Depends(get_db)):
+    try:
+        summary = crud.get_financial_summary(db, user_id)
+        return summary
+    except Exception as e:
+        return {"error": str(e)}
 
 
 
+
+
+# @app.get("/budget/{user_id}")
+# def read_budget(user_id: int, db: Session = Depends(get_db)):
+#     budget = crud.get_budget(db, user_id)
+#     return {"budgets": budget}
+
+
+@app.get("/savings-recommendations/{user_id}")
+def read_savings_recommendations(user_id: int, db: Session = Depends(get_db)):
+    recommendation = crud.get_savings_recommendations(db, user_id)
+    return {"recommendation": recommendation}
+
+
+
+@app.get("/financial-health-score/{user_id}")
+def read_financial_health_score(user_id: int, db: Session = Depends(get_db)):
+    score = crud.get_financial_health_score(db, user_id)
+    return {"score": score}
+
+
+
+@app.post("/budgets/{user_id}")
+def create_budget_endpoint(user_id: int, category: str, budget_amount: float, db: Session = Depends(get_db)):
+    crud.create_budget(db, user_id, category, budget_amount)
+    return {"message": "Budget created successfully"}
+
+@app.get("/budgets/{user_id}")
+def read_budgets_endpoint(user_id: int, db: Session = Depends(get_db)):
+    budgets = crud.get_budgets(db, user_id)
+    return {"budgets": budgets}
+
+@app.put("/budgets/{budget_id}")
+def update_budget_endpoint(budget_id: int, budget_amount: float, db: Session = Depends(get_db)):
+    crud.update_budget(db, budget_id, budget_amount)
+    return {"message": "Budget updated successfully"}
+
+@app.delete("/budgets/{budget_id}")
+def delete_budget_endpoint(budget_id: int, db: Session = Depends(get_db)):
+    crud.delete_budget(db, budget_id)
+    return {"message": "Budget deleted successfully"}
