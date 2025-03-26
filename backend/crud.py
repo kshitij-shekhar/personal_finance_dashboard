@@ -102,3 +102,18 @@ def get_net_savings(db: Session, user_id: int):
         print(f"Error fetching net savings: {e}")
         return 0  # Return 0 on error
 
+
+def get_expense_breakdown(db: Session, user_id: int):
+    result = db.execute(
+        text("""
+            SELECT category, COALESCE(SUM(amount), 0) AS total
+            FROM expenses
+            WHERE user_id = :user_id
+            GROUP BY category
+            ORDER BY total DESC
+        """),
+        {"user_id": user_id}
+    ).fetchall()
+    
+    return [{"name": row.category, "total": row.total} for row in result]
+

@@ -85,4 +85,12 @@ def read_net_savings(user_id: int, db: Session = Depends(get_db)):
         return {"error": str(e)}  # Return error message in JSON format
 
 
+@app.get("/expense-breakdown/{user_id}")
+def read_expense_breakdown(user_id: int, db: Session = Depends(get_db)):
+    expense_breakdown = crud.get_expense_breakdown(db, user_id)
+    return {"categories": expense_breakdown}
+
+
+
+
 

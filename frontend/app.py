@@ -188,3 +188,26 @@ with st.container():
             toggle_section('net_savings')
 
 
+
+# Add functionality for Expense Breakdown By Category
+with st.container():
+    st.header("Expense Breakdown by Category")
+    if st.button("Show Expense Breakdown"):
+        toggle_section('expense_breakdown')
+
+    if st.session_state.show_sections['expense_breakdown']:
+        response = requests.get(f"http://localhost:8000/expense-breakdown/{user_id}")
+        
+        if response.status_code == 200:
+            try:
+                data = response.json()  # Attempt to parse JSON
+                for category in data['categories']:
+                    st.write(f"{category['name']}: ${category['total']}")
+            except requests.exceptions.JSONDecodeError:
+                st.error("Failed to decode JSON from server response.")
+        else:
+            st.error(f"Error fetching expense breakdown: {response.status_code}")
+
+        if st.button("Close Expense Breakdown"):
+            toggle_section('expense_breakdown')
+
