@@ -1,333 +1,740 @@
 import streamlit as st
 import requests
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from backend.database import SessionLocal, engine
+from backend import crud
+import datetime
 
-# Initialize session states for all toggleable sections
-if 'show_sections' not in st.session_state:
-    st.session_state.show_sections = {
-        'register': False,
-        'add_expense': False,
-        'view_expenses': False,
-        'savings': False,
-        'financial_report': False,
-        'total_expenses': False,
-        'total_income': False,
-        'net_savings': False,
-        'expense_breakdown':False,
-        'financial_summary':False,
-        'budget':False,
-        'savings_recommendations':False,
-        'financial_health':False
+# Initialize session states for user authentication
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
 
-    }
+# User Registration and Login
+def authenticate_user():
+    st.title("User Authentication")
+    choice = st.selectbox("Select an option", ["Login", "Register"])
 
-def toggle_section(section_name):
-    st.session_state.show_sections[section_name] = not st.session_state.show_sections[section_name]
+    if choice == "Login":
+        username = st.text_input("Username")
+        password = st.text_input("Password", type='password')
+        if st.button("Login"):
+            response = requests.post(f"http://localhost:8000/login", json={"username": username, "password": password})
+            if response.status_code == 200:
+                st.session_state.user_id = response.json()['user_id']  # Store user ID in session state
+                st.success("Login successful!")
+                st.rerun()  # Refresh to show dashboard
+            else:
+                st.error("Invalid username or password")
 
-st.title("Personal Finance Dashboard")
+    elif choice == "Register":
+        username = st.text_input("Choose a Username")
+        password = st.text_input("Choose a Password", type='password')
+        if st.button("Register"):
+            response = requests.post(f"http://localhost:8000/register", json={"username": username, "password": password})
+            if response.status_code == 201:
+                st.success("Registration successful! You can now log in.")
+            else:
+                st.error("Registration failed. Please try again.")
 
-# User Registration Section
-with st.container():
-    st.header("User Registration")
-    username = st.text_input("Username", key="reg_user")
-    password = st.text_input("Password", type='password', key="reg_pass")
+
+#  Function to fetch user data
+def fetch_user_data(user_id):
+    db: Session = SessionLocal()
     
-    if st.button("Register"):
-        toggle_section('register')
+    # Fetch income, expenses, and savings data
+    income_query = "SELECT SUM(amount) AS total_income FROM income WHERE user_id = :user_id"
+    expenses_query = "SELECT SUM(amount) AS total_expenses FROM expenses WHERE user_id = :user_id"
+    # savings_query = "SELECT amount FROM savings WHERE user_id = :user_id"  # Assuming you have a savings table
+
+    total_income = db.execute(text(income_query), {"user_id": user_id}).scalar() or 0
+    total_expenses = db.execute(text(expenses_query), {"user_id": user_id}).scalar() or 0
+    # savings_amount = db.execute(text(savings_query), {"user_id": user_id}).scalars().all()
     
-    if st.session_state.show_sections['register']:
-        response = requests.post("http://localhost:8000/users/", 
-                               json={"username": username, "password": password})
-        if response.status_code == 200:
-            st.success("User created successfully!")
-        else:
-            st.error("Error creating user.")
+    return total_income, total_expenses
 
 
-# Expense Input Section
-with st.container():
-    st.header("Add Expense")
-    user_id = st.number_input("User ID", min_value=1, key="expense_user")
-    amount = st.number_input("Amount", min_value=0.01, key="expense_amount")
-    category = st.text_input("Category", key="expense_cat")
-    date = st.date_input("Date", key="expense_date")
+
+
+# def populate_income_expense_summary(user_id):
+#     # Check if summary data exists for this user
+#     query_check = """
+#         SELECT COUNT(*) 
+#         FROM income_expense_summary 
+#         WHERE user_id = :user_id;
+#     """
     
-    if st.button("Add Expense"):
-        toggle_section('add_expense')
+#     with engine.connect() as connection:
+#         result = connection.execute(text(query_check), {"user_id": user_id}).fetchone()
     
-    if st.session_state.show_sections['add_expense']:
-        expense_data = {
-            "user_id": user_id,
-            "amount": amount,
-            "category": category,
-            "date": str(date),
-        }
-        response = requests.post("http://localhost:8000/expenses/", json=expense_data)
-        if response.status_code == 200:
-            st.success("Expense added successfully!")
-        else:
-            st.error("Error adding expense.")
-
-
-# View Expenses Section
-with st.container():
-    st.header("View Expenses")
-    if st.button("Show Expenses"):
-        toggle_section('view_expenses')
-    
-    if st.session_state.show_sections['view_expenses']:
-        expenses_response = requests.get(f"http://localhost:8000/expenses/{user_id}")
-        if expenses_response.status_code == 200:
-            expenses_data = expenses_response.json()
-            for expense in expenses_data:
-                st.write(expense)
-        else:
-            st.error("Error fetching expenses.")
-
-
-# Savings Calculator Section
-with st.container():
-    st.header("Savings Calculator")
-    if st.button("Calculate Monthly Savings"):
-        toggle_section('savings')
-    
-    if st.session_state.show_sections['savings']:
-        response = requests.post(f"http://localhost:8000/calculate-savings/{user_id}")
-        if response.json()["status"] == "success":
-            st.success("Savings updated!")
-        else:
-            st.error("Calculation failed")
-
-
-# # Financial Report Section
-# with st.container():
-#     st.header("Financial Report")
-#     if st.button("Generate Report"):
-#         toggle_section('financial_report')
-    
-#     if st.session_state.show_sections['financial_report']:
-#         report = requests.get(f"http://localhost:8000/financial-report/{user_id}").json()
-#         st.write(f"User: {report['username']}")
-#         col1, col2, col3 = st.columns(3)
-#         col1.metric("Total Income", f"${report['total_income']}")
-#         col2.metric("Total Expenses", f"${report['total_expenses']}")
-#         col3.metric("Net Savings", f"${report['net_savings']}")
-
-
-
-# Total Expenses Section
-with st.container():
-    st.header("Total Expenses")
-    if st.button("Get Total Expenses"):
-        toggle_section('total_expenses')
-    
-    if st.session_state.show_sections['total_expenses']:
-        # Make the API request
-        response = requests.get(f"http://localhost:8000/total-expenses/{user_id}")
+#     if result[0] == 0:  # No records found for this user
+#         # Populate summary from income and expenses tables
+#         query_populate = """
+#             INSERT INTO income_expense_summary (user_id, year, month, total_income, total_expenses)
+#             SELECT 
+#                 e.user_id,
+#                 EXTRACT(YEAR FROM COALESCE(i.date, e.date)) AS year,
+#                 EXTRACT(MONTH FROM COALESCE(i.date, e.date)) AS month,
+#                 COALESCE(SUM(i.amount), 0) AS total_income,
+#                 COALESCE(SUM(e.amount), 0) AS total_expenses
+#             FROM users u
+#             LEFT JOIN income i ON u.id = i.user_id
+#             LEFT JOIN expenses e ON u.id = e.user_id
+#             WHERE u.id = :user_id
+#             GROUP BY e.user_id, year, month;
+#         """
         
-        # Check if the response is valid
-        if response.status_code == 200:
-            try:
-                data = response.json()  # Attempt to parse JSON
-                total_expenses = data.get('total_expenses', 'N/A')  # Get 'total_expenses' or 'N/A'
-                st.write(f"Total Expenses: ${total_expenses}")
-            except requests.exceptions.JSONDecodeError:
-                st.error("Failed to decode JSON from the server response.")
-        else:
-            st.error(f"Error fetching total expenses: {response.status_code}")
+#         with engine.connect() as connection:
+#             connection.execute(text(query_populate), {"user_id": user_id})
+
+
+# def display_income_vs_expenses_chart(user_id):
+#     db: Session = SessionLocal()  # Create a new database session
+
+#     # Check if sufficient data exists
+#     message = crud.check_user_data(db, user_id)
+#     if message != "Data available":
+#         st.warning(message)
+#         return
+
+#     # Fetch actual data from the database
+#     data = crud.fetch_income_expense_summary(db, user_id)
+
+#     if not data:
+#         st.warning("No data available to display.")
+#         return
+
+#     # Prepare lists for months, income, and expenses
+#     months = [f"{row.month}/{row.year}" for row in data]
+#     income_data = [row.total_income for row in data]
+#     expenses_data = [row.total_expenses for row in data]
+
+#     # Create a line chart using Plotly
+#     fig_line = go.Figure()
+
+#     fig_line.add_trace(go.Scatter(
+#         x=months,
+#         y=income_data,
+#         mode="lines+markers",
+#         name="Income",
+#         line=dict(color="#2ecc71")
+#     ))
+
+#     fig_line.add_trace(go.Scatter(
+#         x=months,
+#         y=expenses_data,
+#         mode="lines+markers",
+#         name="Expenses",
+#         line=dict(color="#e74c3c")
+#     ))
+
+#     fig_line.update_layout(
+#         title="Income vs Expenses Over Time",
+#         xaxis_title="Month",
+#         yaxis_title="Amount ($)",
+#         hovermode="x unified"
+#     )
+
+#     st.plotly_chart(fig_line)
+
+
+def populate_income_expense_summary(user_id):
+    """
+    Calls the SQL function populate_income_expense_summary to update the summary table.
+    """
+    with engine.connect() as connection:
+        connection.execute(text("SELECT populate_income_expense_summary(:user_id);"), 
+                           {"user_id": user_id})
+
+def display_income_vs_expenses_chart(user_id):
+    db: Session = SessionLocal()  # Create a new database session
+
+    # **Ensure data is updated before displaying the chart**
+    populate_income_expense_summary(user_id)
+
+    # Check if sufficient data exists
+    message = crud.check_user_data(db, user_id)
+    if message != "Data available":
+        st.warning(message)
+        return
+
+    # Fetch actual data from the database
+    data = crud.fetch_income_expense_summary(db, user_id)
+
+    if not data:
+        st.warning("No data available to display.")
+        return
+
+    # Prepare lists for months, income, and expenses
+    months = [f"{row.month}/{row.year}" for row in data]
+    income_data = [row.total_income for row in data]
+    expenses_data = [row.total_expenses for row in data]
+
+    # Create a line chart using Plotly
+    fig_line = go.Figure()
+
+    fig_line.add_trace(go.Scatter(
+        x=months,
+        y=income_data,
+        mode="lines+markers",
+        name="Income",
+        line=dict(color="#2ecc71")
+    ))
+
+    fig_line.add_trace(go.Scatter(
+        x=months,
+        y=expenses_data,
+        mode="lines+markers",
+        name="Expenses",
+        line=dict(color="#e74c3c")
+    ))
+
+    fig_line.update_layout(
+        title="Income vs Expenses Over Time",
+        xaxis_title="Month",
+        yaxis_title="Amount ($)",
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig_line)
+
+
+
+def display_expense_heatmap(user_id):
+    db: Session = SessionLocal()  # Create a new database session
+
+    # Fetch expense breakdown by category and month
+    query = """
+        SELECT 
+            EXTRACT(YEAR FROM e.date) AS year,
+            EXTRACT(MONTH FROM e.date) AS month,
+            e.category,
+            SUM(e.amount) AS total_expense
+        FROM 
+            expenses e
+        WHERE 
+            e.user_id = :user_id
+        GROUP BY 
+            year, month, e.category
+        ORDER BY 
+            year, month;
+    """
     
+    result = db.execute(text(query), {"user_id": user_id}).fetchall()
 
+    if not result:
+        st.warning("No expense data available to display.")
+        return
 
-
-
-# Total Income Section
-with st.container():
-    st.header("Total Income")
-    if st.button("Get Total Income"):
-        toggle_section('total_income')
+    # Prepare data for heatmap
+    months = []
+    categories = set()
     
-    if st.session_state.show_sections['total_income']:
-        response = requests.get(f"http://localhost:8000/total-income/{user_id}")
-        
-        # Check if the response is valid
-        if response.status_code == 200:
-            try:
-                data = response.json()  # Attempt to parse JSON
-                total_income = data.get('total_income', 'N/A')  # Get 'total_income' or 'N/A'
-                st.write(f"Total Income: ${total_income}")
-            except requests.exceptions.JSONDecodeError:
-                st.error("Failed to decode JSON from the server response.")
-        else:
-            st.error(f"Error fetching total income: {response.status_code}")
+    for row in result:
+        year_month = f"{int(row.month)}/{int(row.year)}"
+        months.append(year_month)
+        categories.add(row.category)
 
-        
+    expense_matrix = pd.DataFrame(0, index=list(categories), columns=list(set(months)))
 
+    for row in result:
+        year_month = f"{int(row.month)}/{int(row.year)}"
+        expense_matrix.at[row.category, year_month] += row.total_expense
 
-
-
-# Net Savings Section
-with st.container():
-    st.header("Net Savings")
-    if st.button("Get Net Savings"):
-        toggle_section('net_savings')
+    # Reset index to use it as a column in heatmap visualization
+    expense_matrix.reset_index(inplace=True)
     
-    if st.session_state.show_sections['net_savings']:
-        response = requests.get(f"http://localhost:8000/net-savings/{user_id}")
-        
-        # Check if the response is valid
-        if response.status_code == 200:
-            try:
-                data = response.json()  # Attempt to parse JSON
-                net_savings = data.get('net_savings', 'N/A')  # Get 'net_savings' or 'N/A'
-                st.write(f"Net Savings: ${net_savings}")
-            except requests.exceptions.JSONDecodeError:
-                st.error("Failed to decode JSON from server response.")
-        else:
-            st.error(f"Error fetching net savings: {response.status_code}")
+    # Melt the DataFrame for heatmap plotting
+    heatmap_data = pd.melt(expense_matrix, id_vars='index', value_vars=expense_matrix.columns[1:], 
+                            var_name='Month', value_name='Expense')
+    
+    heatmap_data.rename(columns={'index': 'Category'}, inplace=True)
 
-        
-
-
-
-# Add functionality for Expense Breakdown By Category
-with st.container():
-    st.header("Expense Breakdown by Category")
-    if st.button("Show Expense Breakdown"):
-        toggle_section('expense_breakdown')
-
-    if st.session_state.show_sections['expense_breakdown']:
-        response = requests.get(f"http://localhost:8000/expense-breakdown/{user_id}")
-        
-        if response.status_code == 200:
-            try:
-                data = response.json()
-                # Check if data['categories'] is a list before iterating
-                if isinstance(data.get('categories', []), list):
-                    for category in data['categories']:
-                        st.write(f"{category['category']}: ${category['total']}") 
-                else:
-                    st.error("Invalid data format received.")
-            except requests.exceptions.JSONDecodeError:
-                st.error("Failed to decode JSON from server response.")
-        else:
-            st.error(f"Error fetching expense breakdown: {response.status_code}")
+    # Create heatmap using Plotly Express
+    fig_heatmap = px.imshow(
+        heatmap_data.pivot(index="Category", columns="Month", values="Expense"),
+        labels=dict(x="Month", y="Category", color="Expense"),
+        title="Expenses Heatmap by Category and Month",
+        color_continuous_scale='Viridis'
+    )
+    
+    st.plotly_chart(fig_heatmap)
 
 
-with st.container():
-    st.header("Financial Summary Dashboard")
-    if st.button("Show Financial Summary"):
-        toggle_section('financial_summary')
+# Function to display financial health check
+def display_financial_health_check(total_income, total_expenses):
+    st.header("Financial Health Check")
+    
+    financial_health_score = (total_income - total_expenses) / total_income * 100 if total_income > 0 else 0
+    
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=financial_health_score,
+        title={"text": "Financial Health Score"},
+        gauge={
+            "axis": {"range": [0, 100]},
+            "bar": {"color": "green"},
+            "steps": [
+                {"range": [0, 50], "color": "red"},
+                {"range": [50, 75], "color": "yellow"},
+                {"range": [75, 100], "color": "lightgreen"},
+            ],
+        },
+    ))
+    
+    st.plotly_chart(fig_gauge)
 
-    if st.session_state.show_sections['financial_summary']:
-        response = requests.get(f"http://localhost:8000/financial-summary/{user_id}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(data)
-            st.write(f"Username: {data['username']}")
-            st.write(f"Savings Goal: ${data['savings_goal']}")
-            st.write(f"Current Savings: ${data['current_savings']}")
-            st.write(f"Savings Progress: {data['savings_progress_percentage']}%")
-            st.write(f"Expense-to-Income Ratio: {data['expense_to_income_ratio']}%")
-        else:
-            st.error(f"Error fetching financial summary: {response.status_code}")
+# Function to display budget allocation
+def display_budget_allocation(user_id):
+    st.header("Budget Allocation")
+    
+    query = """
+        SELECT category, SUM(amount) AS total_expense 
+        FROM expenses 
+        WHERE user_id = :user_id 
+        GROUP BY category;
+    """
+    
+    db: Session = SessionLocal()
+    results = db.execute(text(query), {"user_id": user_id}).fetchall()
+    
+    categories = [row.category for row in results]
+    expenses = [row.total_expense for row in results]
 
-        if st.button("Close Financial Summary"):
-            toggle_section('financial_summary')
+    fig_bar = go.Figure(data=[
+        go.Bar(x=categories, y=expenses)
+    ])
+    
+    fig_bar.update_layout(title="Budget Allocation by Category", xaxis_title="Category", yaxis_title="Total Expenses")
+    
+    st.plotly_chart(fig_bar)
+
+# Function to display net worth tracker
+def display_net_worth_tracker(user_id):
+    st.header("Net Worth Tracker")
+    
+    query_assets = """
+        SELECT SUM(value) AS total_assets FROM assets WHERE user_id = :user_id;
+    """
+    
+    # query_liabilities = """
+    #     SELECT SUM(value) AS total_liabilities FROM liabilities WHERE user_id = :user_id;
+    # """
+    
+    db: Session = SessionLocal()
+    
+    total_assets = db.execute(text(query_assets), {"user_id": user_id}).scalar() or 0
+    # total_liabilities = db.execute(text(query_liabilities), {"user_id": user_id}).scalar() or 0
+    total_liabilities=calculate_liabilities(user_id)
+    net_worth = total_assets - total_liabilities
+    
+    fig_net_worth = go.Figure(go.Indicator(
+        mode="number",
+        value=net_worth,
+        title={"text": "Net Worth"},
+        number={"prefix": "$"},
+        domain={'x': [0, 1], 'y': [0, 1]}
+    ))
+    
+    st.plotly_chart(fig_net_worth)
 
 
 
 
-        
-# with st.container():
-#     st.header("Budgeting Tool")
-#     if st.button("Show Budgets"):
-#         toggle_section('budget')
+# Function to calculate savings based on income and expenses
+def calculate_savings(user_id):
+    db: Session = SessionLocal()
+    
+    savings_query = """
+        SELECT 
+            year,
+            month,
+            (total_income - total_expenses) AS savings
+        FROM income_expense_summary
+        WHERE user_id = :user_id;
+    """
+    
+    results = db.execute(text(savings_query), {"user_id": user_id}).fetchall()
+    
+    return pd.DataFrame(results)
 
-#     if st.session_state.show_sections['budget']:
-#         response = requests.get(f"http://localhost:8000/budget/{user_id}")
-        
-#         if response.status_code == 200:
-#             data = response.json()
-#             for budget in data['budgets']:
-#                 st.write(f"{budget['category']}: ${budget['budget']}")
-#         else:
-#             st.error(f"Error fetching budgets: {response.status_code}")
+# Function to calculate total liabilities
+def calculate_liabilities(user_id):
+    db: Session = SessionLocal()
+    
+    query_liabilities = """
+        SELECT 
+            SUM(amount) AS total_liabilities 
+        FROM debts 
+        WHERE user_id = :user_id;
+    """
+    
+    return db.execute(text(query_liabilities), {"user_id": user_id}).scalar() or 0
 
-        
-with st.container():
+# Function to display savings recommendations
+def display_savings_recommendations(total_income, total_expenses):
     st.header("Savings Recommendations")
-    if st.button("Get Recommendations"):
-        toggle_section('savings_recommendations')
-
-    if st.session_state.show_sections['savings_recommendations']:
-        response = requests.get(f"http://localhost:8000/savings-recommendations/{user_id}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            st.write(data['recommendation'])
-        else:
-            st.error(f"Error fetching recommendations: {response.status_code}")
-
-        if st.button("Close Recommendations"):
-            toggle_section('savings_recommendations')
-
-
-
-
-with st.container():
-    st.header("Monthly Financial Health Check")
-    if st.button("Check Financial Health"):
-        toggle_section('financial_health')
-
-    if st.session_state.show_sections['financial_health']:
-        response = requests.get(f"http://localhost:8000/financial-health-score/{user_id}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            st.write(f"Your Financial Health Score is: {data['score']}")
-        else:
-            st.error(f"Error fetching financial health score: {response.status_code}")
-
-        if st.button("Close Financial Health Check"):
-            toggle_section('financial_health')
-
-
-with st.container():
-    st.header("Budgeting Tool")
     
-    # Create a new budget
-    st.subheader("Create New Budget")
-    category = st.text_input("Category")
-    amount = st.number_input("Budget Amount", min_value=0.0)
+    monthly_savings_rate = (total_income - total_expenses) / total_income * 100 if total_income > 0 else 0
+    print(type(total_income), type(0.20))
+    recommended_savings = float(total_income) * 0.20  # Recommend saving 20% of income
     
-    if st.button("Create Budget"):
-        response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": category, "budget_amount": amount})
+    st.write(f"**Current Savings Rate:** {monthly_savings_rate:.2f}%")
+    st.write(f"**Recommended Monthly Savings:** ${recommended_savings:.2f}")
+    
+    if (total_income - total_expenses) < recommended_savings:
+        st.warning("You are not saving enough! Consider increasing your monthly savings.")
+    else:
+        st.success("Great job! You are meeting your savings goals.")
+
+# Function to display liabilities
+def display_liabilities(user_id):
+    st.header("Total Liabilities")
+    
+    total_liabilities = calculate_liabilities(user_id)
+    
+    st.write(f"**Total Liabilities:** ${total_liabilities:.2f}")
+
+# Function to display net financial position
+def display_net_financial_position(user_id):
+    st.header("Net Financial Position")
+    
+    total_income, total_expenses = fetch_user_data(user_id)
+    
+    # Calculate savings
+    savings_df = calculate_savings(user_id)
+    
+    # Calculate liabilities
+    total_liabilities = calculate_liabilities(user_id)
+    
+    # Calculate net financial position for each month
+    net_financial_positions = []
+    
+    for index, row in savings_df.iterrows():
+        net_position = row.savings - total_liabilities
+        net_financial_positions.append(net_position)
+
+    savings_df['net_financial_position'] = net_financial_positions
+    
+    # Plotting Net Financial Position
+    fig_net_position = go.Figure()
+    
+    fig_net_position.add_trace(go.Scatter(
+        x=savings_df['month'].astype(str) + '/' + savings_df['year'].astype(str),
+        y=savings_df['net_financial_position'],
+        mode='lines+markers',
+        name='Net Financial Position',
+        line=dict(color='blue')
+    ))
+    
+    fig_net_position.update_layout(title="Net Financial Position Over Time",
+                                    xaxis_title="Month/Year",
+                                    yaxis_title="Net Position ($)")
+    
+    st.plotly_chart(fig_net_position)
+
+# Function to display debt management insights
+def display_debt_management(user_id):
+    st.header("Debt Management Insights")
+    
+    query_debt = """
+        SELECT category, SUM(amount) AS total_debt 
+        FROM debts 
+        WHERE user_id = :user_id 
+        GROUP BY category;
+    """
+    
+    db: Session = SessionLocal()
+    
+    results_debt = db.execute(text(query_debt), {"user_id": user_id}).fetchall()
+    
+    debt_categories = [row.category for row in results_debt]
+    debts = [row.total_debt for row in results_debt]
+
+    fig_debt_pie = go.Figure(data=[go.Pie(labels=debt_categories, values=debts)])
+    
+    fig_debt_pie.update_layout(title="Debt Distribution by Category")
+    
+    st.plotly_chart(fig_debt_pie)
+
+
+# Check if user is logged in
+if not st.session_state.user_id:
+    authenticate_user()
+else:
+    user_id = st.session_state.user_id
+
+    # Fetch financial summary data
+    response_summary = requests.get(f"http://localhost:8000/financial-summary/{user_id}")
+    financial_summary = response_summary.json() if response_summary.status_code == 200 else {}
+
+    # Fetch expense breakdown data
+    response_expenses = requests.get(f"http://localhost:8000/expense-breakdown/{user_id}")
+    expense_data = response_expenses.json()["categories"] if response_expenses.status_code == 200 else []
+
+    
+
+
+
+    expense_categories = [item["category"] for item in expense_data]
+    expense_amounts = [item["total"] for item in expense_data]
+
+    
+
+    # ------------------------------
+    # Dashboard Layout
+    # ------------------------------
+    st.title("Personal Finance Dashboard")
+
+    # ------------------------------
+    # Section: Key Metrics (Cards)
+    # ------------------------------
+    st.header("Key Metrics")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Income", f"${financial_summary.get('total_income', 0):.2f}")
+    
+    with col2:
+        st.metric("Total Expenses", f"${financial_summary.get('total_expenses', 0):.2f}")
+    
+    with col3:
+        st.metric("Net Savings", f"${financial_summary.get('net_savings', 0):.2f}")
+
+    # ------------------------------
+    # Section: Visualizations
+    # ------------------------------
+    
+    # Display Income vs Expenses Chart
+    populate_income_expense_summary(st.session_state.user_id)
+
+    display_income_vs_expenses_chart(st.session_state.user_id)
+
+   # Display Expense Heatmap
+    display_expense_heatmap(st.session_state.user_id)
+
+    # Create Bar Chart for Expenses by Category
+    if expense_categories and expense_amounts:  # Ensure data is available
+        fig_bar = px.bar(
+            x=expense_categories,
+            y=expense_amounts,
+            labels={'x': 'Category', 'y': 'Amount ($)'},
+            title="Expenses by Category",
+            color=expense_categories,  # Optional: Color by category
+        )
+        st.plotly_chart(fig_bar)
+    else:
+        st.warning("No expense data available.")
+
+
+    total_income, total_expenses = fetch_user_data(user_id)
+   
+    # Display all sections
+    display_savings_recommendations(total_income, total_expenses)
+    display_liabilities(user_id)
+    display_net_financial_position(user_id)
+    display_financial_health_check(total_income,total_expenses)
+    display_budget_allocation(user_id)
+    display_net_worth_tracker(user_id)
+    display_debt_management(user_id)
+
+# ------------------------------
+# Action Buttons Section
+# ------------------------------
+st.header("Manage Your Finances")
+
+# Initialize session state variables
+if "expense_clicked" not in st.session_state:
+    st.session_state.expense_clicked = False
+if "income_clicked" not in st.session_state:
+    st.session_state.income_clicked = False
+if "budget_create_clicked" not in st.session_state:
+    st.session_state.budget_create_clicked = False
+if "budget_update_clicked" not in st.session_state:
+    st.session_state.budget_update_clicked = False
+if "budget_delete_clicked" not in st.session_state:
+    st.session_state.budget_delete_clicked = False
+
+
+
+
+def fetch_totals():
+    user_id=st.session_state.user_id
+    response = requests.get(f"http://localhost:8000/totals/{user_id}")
+    if response.status_code == 200:
+        return response.json()
+    return {"total_income": 0, "total_expenses": 0, "net_savings": 0}
+
+#  Fetch fresh totals on every run
+totals = fetch_totals()
+
+
+
+
+
+
+# -------------------- Add Expense --------------------
+if st.button("Add Expense"):
+    st.session_state.expense_clicked = not(st.session_state.expense_clicked)
+
+if st.session_state.expense_clicked:
+    user_id=st.session_state.user_id
+    category = st.text_input("Category", key="expense_category")
+    amount = st.number_input("Amount", min_value=0.01, key="expense_amount")
+    date = st.date_input("Date", value=datetime.date.today(), key="expense_date")
+
+    if st.button("Submit Expense"):
+        payload = {"category": category, "amount": amount,"date":str(date)}
+
+        response = requests.post(f"http://localhost:8000/add-expense/{user_id}", json=payload)
+        
+        if response.status_code == 201:
+            st.success("Expense added successfully!")
+            st.rerun()
+        else:
+            st.error(f"Failed to add expense. Server response: {response.text}")
+
+
+
+# -------------------- Add Income --------------------
+if st.button("Add Income"):
+    st.session_state.income_clicked = not(st.session_state.income_clicked)
+
+if st.session_state.income_clicked:
+    user_id=st.session_state.user_id
+    source = st.text_input("Income Source", key="income_source")
+    amount_income = st.number_input("Income Amount", min_value=0.01, key="income_amount")
+    date = st.date_input("Date", value=datetime.date.today()) 
+
+    if st.button("Submit Income"):
+        response = requests.post(f"http://localhost:8000/add-income/{user_id}", json={"source": source, "amount": amount_income,"date":str(date)})
+        if response.status_code ==201:
+            st.success("Income added successfully!")
+            st.rerun()
+        else:
+            st.error(f"Failed to add income. Server response: {response.text}")
+
+# -------------------- Create New Budget --------------------
+if st.button("Create New Budget"):
+    st.session_state.budget_create_clicked = not(st.session_state.budget_create_clicked)
+
+if st.session_state.budget_create_clicked:
+    budget_category = st.text_input("Budget Category", key="budget_category")
+    budget_amount = st.number_input("Budget Amount", min_value=0.01, key="budget_amount")
+
+    if st.button("Submit Budget"):
+        response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": budget_category, "budget_amount": budget_amount})
         if response.status_code == 200:
             st.success("Budget created successfully!")
+            st.session_state.budget_create_clicked = False
         else:
-            st.error("Error creating budget.")
-    
-    # View existing budgets
-    if st.button("View Budgets"):
-        response = requests.get(f"http://localhost:8000/budgets/{user_id}")
-        if response.status_code == 200:
-            data = response.json()
-            for budget in data['budgets']:
-                st.write(f"Category: {budget['category']}, Amount: ${budget['budget_amount']}")
-                # Optionally add update and delete buttons here for each budget entry
-                if st.button(f"Update Budget for {budget['category']}"):
-                    new_amount = st.number_input(f"New Amount for {budget['category']}", min_value=0.0)
-                    update_response = requests.put(f"http://localhost:8000/budgets/{budget['id']}", json={"budget_amount": new_amount})
-                    if update_response.status_code == 200:
-                        st.success("Budget updated successfully!")
-                    else:
-                        st.error("Error updating budget.")
+            st.error("Failed to create budget.")
 
-                if st.button(f"Delete Budget for {budget['category']}"):
-                    delete_response = requests.delete(f"http://localhost:8000/budgets/{budget['id']}")
-                    if delete_response.status_code == 200:
-                        st.success("Budget deleted successfully!")
-                    else:
-                        st.error("Error deleting budget.")
+# -------------------- Update Budget --------------------
+if st.button("Update Budget"):
+    st.session_state.budget_update_clicked = True
+
+if st.session_state.budget_update_clicked:
+    budget_id_to_update = st.number_input("Budget ID to Update", key="budget_id_update")
+    new_budget_amount = st.number_input("New Budget Amount", min_value=0.01, key="new_budget_amount")
+
+    if st.button("Submit Update"):
+        response = requests.put(f"http://localhost:8000/budgets/{budget_id_to_update}", json={"budget_amount": new_budget_amount})
+        if response.status_code == 200:
+            st.success("Budget updated successfully!")
+            st.session_state.budget_update_clicked = False
         else:
-            st.error("Error fetching budgets.")
+            st.error("Failed to update budget.")
+
+# -------------------- Delete Budget --------------------
+if st.button("Delete Budget"):
+    st.session_state.budget_delete_clicked = True
+
+if st.session_state.budget_delete_clicked:
+    budget_id_to_delete = st.number_input("Budget ID to Delete", key="budget_id_delete")
+
+    if st.button("Confirm Deletion"):
+        response = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
+        if response.status_code == 200:
+            st.success("Budget deleted successfully!")
+            st.session_state.budget_delete_clicked = False
+        else:
+            st.error("Failed to delete budget.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# if st.button("Add Expense"):
+#    category = st.text_input("Category")
+#    amount = st.number_input("Amount", min_value=0.01)
+#    if st.button("Submit Expense"):
+#        response_add_expense = requests.post(f"http://localhost:8000/add-expense/{user_id}", json={"category": category, "amount": amount})
+#        if response_add_expense.status_code == 200:
+#            st.success("Expense added successfully!")
+#        else:
+#            st.error("Failed to add expense.")
+
+
+
+
+# if st.button("Add Income"):
+#    source = st.text_input("Income Source")
+#    amount_income = st.number_input("Income Amount", min_value=0.01)
+#    if st.button("Submit Income"):
+#        response_add_income = requests.post(f"http://localhost:8000/add-income/{user_id}", json={"source": source, "amount": amount_income})
+#        if response_add_income.status_code == 200:
+#            st.success("Income added successfully!")
+#        else:
+#            st.error("Failed to add income.")
+
+
+
+# if st.button("Create New Budget"):
+#    budget_category = st.text_input("Budget Category")
+#    budget_amount = st.number_input("Budget Amount", min_value=0.01)
+#    if st.button("Submit Budget"):
+#        response_create_budget = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": budget_category, "budget_amount": budget_amount})
+#        if response_create_budget.status_code == 200:
+#            st.success("Budget created successfully!")
+#        else:
+#            st.error("Failed to create budget.")
+
+# if st.button("Update Budget"):
+#    budget_id_to_update = st.number_input("Budget ID to Update")
+#    new_budget_amount = st.number_input("New Budget Amount", min_value=0.01)
+#    if st.button("Submit Update"):
+#        response_update_budget = requests.put(f"http://localhost:8000/budgets/{budget_id_to_update}", json={"budget_amount": new_budget_amount})
+#        if response_update_budget.status_code == 200:
+#            st.success("Budget updated successfully!")
+#        else:
+#            st.error("Failed to update budget.")
+
+# if st.button("Delete Budget"):
+#    budget_id_to_delete = st.number_input("Budget ID to Delete")
+#    if st.button("Confirm Deletion"):
+#        response_delete_budget = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
+#        if response_delete_budget.status_code == 200:
+#            st.success("Budget deleted successfully!")
+#        else:
+#            st.error("Failed to delete budget.")
