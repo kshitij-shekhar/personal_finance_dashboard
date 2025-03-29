@@ -140,8 +140,47 @@ $$ LANGUAGE plpgsql;
 
 
 
+CREATE OR REPLACE FUNCTION get_total_liabilities(user_id_input INT) 
+RETURNS NUMERIC AS $$
+BEGIN
+    RETURN (
+        SELECT COALESCE(SUM(amount), 0) 
+        FROM debts 
+        WHERE user_id = user_id_input
+    );
+END;
+$$ LANGUAGE plpgsql;
 
 
 
+CREATE OR REPLACE FUNCTION get_total_assets(p_user_id INT) 
+RETURNS NUMERIC AS $$
+DECLARE 
+    total_assets NUMERIC;
+BEGIN
+    SELECT COALESCE(SUM(value), 0) INTO total_assets 
+    FROM assets WHERE user_id = p_user_id;
+    
+    RETURN total_assets;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+CREATE OR REPLACE FUNCTION get_net_worth(p_user_id INT) 
+RETURNS NUMERIC AS $$
+DECLARE 
+    total_assets NUMERIC;
+    total_liabilities NUMERIC;
+    net_worth NUMERIC;
+BEGIN
+    SELECT get_total_assets(p_user_id) INTO total_assets;
+    SELECT get_total_liabilities(p_user_id) INTO total_liabilities;
+    
+    net_worth := total_assets - total_liabilities;
+    
+    RETURN net_worth;
+END;
+$$ LANGUAGE plpgsql;
 
 -- psql -U your_username -d db_name -a -f backend/db/functions.sql

@@ -8,7 +8,7 @@ from sqlalchemy import text
 from backend.database import SessionLocal, engine
 from backend import crud
 import datetime
-
+st.set_page_config(layout="wide")
 # Initialize session states for user authentication
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
@@ -55,90 +55,6 @@ def fetch_user_data(user_id):
     # savings_amount = db.execute(text(savings_query), {"user_id": user_id}).scalars().all()
     
     return total_income, total_expenses
-
-
-
-
-# def populate_income_expense_summary(user_id):
-#     # Check if summary data exists for this user
-#     query_check = """
-#         SELECT COUNT(*) 
-#         FROM income_expense_summary 
-#         WHERE user_id = :user_id;
-#     """
-    
-#     with engine.connect() as connection:
-#         result = connection.execute(text(query_check), {"user_id": user_id}).fetchone()
-    
-#     if result[0] == 0:  # No records found for this user
-#         # Populate summary from income and expenses tables
-#         query_populate = """
-#             INSERT INTO income_expense_summary (user_id, year, month, total_income, total_expenses)
-#             SELECT 
-#                 e.user_id,
-#                 EXTRACT(YEAR FROM COALESCE(i.date, e.date)) AS year,
-#                 EXTRACT(MONTH FROM COALESCE(i.date, e.date)) AS month,
-#                 COALESCE(SUM(i.amount), 0) AS total_income,
-#                 COALESCE(SUM(e.amount), 0) AS total_expenses
-#             FROM users u
-#             LEFT JOIN income i ON u.id = i.user_id
-#             LEFT JOIN expenses e ON u.id = e.user_id
-#             WHERE u.id = :user_id
-#             GROUP BY e.user_id, year, month;
-#         """
-        
-#         with engine.connect() as connection:
-#             connection.execute(text(query_populate), {"user_id": user_id})
-
-
-# def display_income_vs_expenses_chart(user_id):
-#     db: Session = SessionLocal()  # Create a new database session
-
-#     # Check if sufficient data exists
-#     message = crud.check_user_data(db, user_id)
-#     if message != "Data available":
-#         st.warning(message)
-#         return
-
-#     # Fetch actual data from the database
-#     data = crud.fetch_income_expense_summary(db, user_id)
-
-#     if not data:
-#         st.warning("No data available to display.")
-#         return
-
-#     # Prepare lists for months, income, and expenses
-#     months = [f"{row.month}/{row.year}" for row in data]
-#     income_data = [row.total_income for row in data]
-#     expenses_data = [row.total_expenses for row in data]
-
-#     # Create a line chart using Plotly
-#     fig_line = go.Figure()
-
-#     fig_line.add_trace(go.Scatter(
-#         x=months,
-#         y=income_data,
-#         mode="lines+markers",
-#         name="Income",
-#         line=dict(color="#2ecc71")
-#     ))
-
-#     fig_line.add_trace(go.Scatter(
-#         x=months,
-#         y=expenses_data,
-#         mode="lines+markers",
-#         name="Expenses",
-#         line=dict(color="#e74c3c")
-#     ))
-
-#     fig_line.update_layout(
-#         title="Income vs Expenses Over Time",
-#         xaxis_title="Month",
-#         yaxis_title="Amount ($)",
-#         hovermode="x unified"
-#     )
-
-#     st.plotly_chart(fig_line)
 
 
 def populate_income_expense_summary(user_id):
@@ -349,12 +265,10 @@ def display_net_worth_tracker(user_id):
     st.header("Net Worth Tracker")
     
     query_assets = """
-        SELECT SUM(value) AS total_assets FROM assets WHERE user_id = :user_id;
+        SELECT get_net_worth(:user_id)
     """
     
-    # query_liabilities = """
-    #     SELECT SUM(value) AS total_liabilities FROM liabilities WHERE user_id = :user_id;
-    # """
+    
     
     db: Session = SessionLocal()
     
@@ -393,18 +307,19 @@ def calculate_savings(user_id):
     
     return pd.DataFrame(results)
 
-# Function to calculate total liabilities
+
+
+
+
 def calculate_liabilities(user_id):
     db: Session = SessionLocal()
     
-    query_liabilities = """
-        SELECT 
-            SUM(amount) AS total_liabilities 
-        FROM debts 
-        WHERE user_id = :user_id;
-    """
+    sql_function_call = "SELECT get_total_liabilities(:user_id) AS total_liabilities;"
     
-    return db.execute(text(query_liabilities), {"user_id": user_id}).scalar() or 0
+    return db.execute(text(sql_function_call), {"user_id": user_id}).scalar() or 0
+
+
+
 
 # Function to display savings recommendations
 def display_savings_recommendations(total_income, total_expenses):
@@ -422,19 +337,28 @@ def display_savings_recommendations(total_income, total_expenses):
     else:
         st.success("Great job! You are meeting your savings goals.")
 
-# Function to display liabilities
+# Function to display total liabilities as an indicator
 def display_liabilities(user_id):
     st.header("Total Liabilities")
     
     total_liabilities = calculate_liabilities(user_id)
     
-    st.write(f"**Total Liabilities:** ${total_liabilities:.2f}")
+    fig_liabilities = go.Figure(go.Indicator(
+        mode="number",
+        value=total_liabilities,
+        title={"text": "Total Liabilities"},
+        number={"prefix": "$"},
+        domain={'x': [0, 1], 'y': [0, 1]}
+    ))
+    
+    st.plotly_chart(fig_liabilities)
+
 
 # Function to display net financial position
 def display_net_financial_position(user_id):
     st.header("Net Financial Position")
     
-    total_income, total_expenses = fetch_user_data(user_id)
+    # total_income, total_expenses = fetch_user_data(user_id)
     
     # Calculate savings
     savings_df = calculate_savings(user_id)
@@ -480,17 +404,62 @@ def display_debt_management(user_id):
     """
     
     db: Session = SessionLocal()
-    
     results_debt = db.execute(text(query_debt), {"user_id": user_id}).fetchall()
     
     debt_categories = [row.category for row in results_debt]
     debts = [row.total_debt for row in results_debt]
-
+    total_debt = sum(debts)  # Calculate total debt value
+    
     fig_debt_pie = go.Figure(data=[go.Pie(labels=debt_categories, values=debts)])
     
-    fig_debt_pie.update_layout(title="Debt Distribution by Category")
+    # Add total debt value as an annotation in the top-right corner
+    fig_debt_pie.update_layout(
+        title="Debt Distribution by Category",
+        annotations=[
+            dict(
+                x=1.2, y=1.2,  # Position in the top-right
+                text=f"Total Debt: ${total_debt:.2f}",
+                showarrow=False,
+                font=dict(size=14, color="White")
+            )
+        ]
+    )
     
     st.plotly_chart(fig_debt_pie)
+
+
+
+# Function to display asset management insights
+def display_asset_management(user_id):
+    st.header("Asset Management Insights")
+    
+    query_assets = """SELECT get_total_assets(:user_id)
+    """
+    
+    db: Session = SessionLocal()
+    results_assets = db.execute(text(query_assets), {"user_id": user_id}).fetchall()
+
+    asset_categories = [row.category for row in results_assets]
+    asset_values = [row.total_value for row in results_assets]
+    total_assets = sum(asset_values)  # Calculate total asset value
+    
+    fig_assets_pie = go.Figure(data=[go.Pie(labels=asset_categories, values=asset_values)])
+    
+    # Add total asset value as an annotation in the top-right corner
+    fig_assets_pie.update_layout(
+        title="Asset Distribution by Category",
+        annotations=[
+            dict(
+                x=1.1, y=1.2,  # Position in the top-right
+                text=f"Total Assets: ${total_assets:.2f}",
+                showarrow=False,
+                font=dict(size=14, color="White")
+            )
+        ]
+    )
+    
+    st.plotly_chart(fig_assets_pie)
+
 
 
 # Check if user is logged in
@@ -519,12 +488,26 @@ else:
     # ------------------------------
     # Dashboard Layout
     # ------------------------------
-    st.title("Personal Finance Dashboard")
+    st.markdown(
+    """
+    <h1 style='text-align: center;'>Personal Finance Dashboard</h1>
+    """,
+    unsafe_allow_html=True
+)
+
+    st.markdown(
+        """
+        <h2 style='text-align: center;'>Key Metrics</h2>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # st.title("Personal Finance Dashboard")
 
     # ------------------------------
     # Section: Key Metrics (Cards)
     # ------------------------------
-    st.header("Key Metrics")
+    # st.header("Key Metrics")
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -543,35 +526,68 @@ else:
     # Display Income vs Expenses Chart
     populate_income_expense_summary(st.session_state.user_id)
 
-    display_income_vs_expenses_chart(st.session_state.user_id)
+    col_left, col_middle, col_right = st.columns([1, 1, 1])
 
-   # Display Expense Heatmap
-    display_expense_heatmap(st.session_state.user_id)
+    # Left Column: Income vs. Expenses Over Time
+    with col_left:
+        # st.subheader("Income vs. Expenses Over Time")
+        display_income_vs_expenses_chart(st.session_state.user_id)  # Call the function that plots this chart
 
-    # Create Bar Chart for Expenses by Category
-    if expense_categories and expense_amounts:  # Ensure data is available
-        fig_bar = px.bar(
-            x=expense_categories,
-            y=expense_amounts,
-            labels={'x': 'Category', 'y': 'Amount ($)'},
-            title="Expenses by Category",
-            color=expense_categories,  # Optional: Color by category
-        )
-        st.plotly_chart(fig_bar)
-    else:
-        st.warning("No expense data available.")
+    # Middle Column: Expenses Heatmap
+    with col_middle:
+        # st.subheader("Expenses Heatmap")
+        display_expense_heatmap(st.session_state.user_id)  # Call the function that plots this chart
+
+    # Right Column: Expenses by Category
+    with col_right:
+        # st.subheader("Expenses by Category")
+        # Create Bar Chart for Expenses by Category
+        if expense_categories and expense_amounts:  # Ensure data is available
+            fig_bar = px.bar(
+                x=expense_categories,
+                y=expense_amounts,
+                labels={'x': 'Category', 'y': 'Amount ($)'},
+                title="Expenses by Category",
+                color=expense_categories,  # Optional: Color by category
+            )
+            st.plotly_chart(fig_bar)
+        else:
+            st.warning("No expense data available.")  # Call the function that plots this chart
+
+
+    
+
+   
+   
+
+    
 
 
     total_income, total_expenses = fetch_user_data(user_id)
-   
+    col_left1, col_middle1, col_right1 = st.columns([1, 1, 1])
     # Display all sections
-    display_savings_recommendations(total_income, total_expenses)
-    display_liabilities(user_id)
-    display_net_financial_position(user_id)
-    display_financial_health_check(total_income,total_expenses)
-    display_budget_allocation(user_id)
-    display_net_worth_tracker(user_id)
-    display_debt_management(user_id)
+    with col_left1:
+        display_savings_recommendations(total_income, total_expenses)
+    with col_middle1:
+        display_liabilities(user_id)
+    with col_right1:
+        display_net_financial_position(user_id)
+
+    col_left2, col_middle2, col_right2 = st.columns([1, 1, 1])
+    # Display all sections
+    with col_left2:
+        display_financial_health_check(total_income,total_expenses)
+    with col_middle2:
+        display_budget_allocation(user_id)
+    with col_right2:
+        display_net_worth_tracker(user_id)
+    
+    
+    col_left3,col_right3=st.columns([1,1])
+    with col_left3:
+        display_asset_management(user_id)
+    with col_right3:
+        display_debt_management(user_id)
 
 # ------------------------------
 # Action Buttons Section
