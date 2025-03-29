@@ -51,6 +51,16 @@ class BudgetCreate(BaseModel):
 class BudgetUpdate(BaseModel):
     new_amount: float
 
+class DebtCreate(BaseModel):
+    category: str
+    amount: float
+    date_incurred: date
+
+class AssetCreate(BaseModel):
+    category: str
+    value: float
+    date_added: date
+
 
 # Pydantic model for login requests
 class LoginRequest(BaseModel):
@@ -180,7 +190,7 @@ def delete_budget(budget_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     
-    
+
 
 @app.get("/budgets/{user_id}")
 def get_budgets(user_id: int, db: Session = Depends(get_db)):
@@ -215,3 +225,66 @@ def get_expense_breakdown(user_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error fetching expense breakdown: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+# --------------------------
+# Debts and Assets
+# --------------------------
+
+# Add Debt
+@app.post("/debts/{user_id}", status_code=201)
+def add_debt(user_id: int, debt: DebtCreate, db: Session = Depends(get_db)):
+    try:
+        new_debt = crud.add_debt_db(db=db, user_id=user_id, category=debt.category, amount=debt.amount, date_incurred=debt.date_incurred)
+        return {"message": "Debt added successfully", "debt_id": new_debt.id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+@app.delete("/debts/{debt_id}")
+def delete_debt(debt_id: int, db: Session = Depends(get_db)):
+    try:
+        crud.delete_debt_db(db=db, debt_id=debt_id)
+        return {"message": "Debt deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+
+@app.get("/debts/{user_id}")
+def get_debts(user_id: int, db: Session = Depends(get_db)):
+    try:
+        debts = crud.get_debts_by_user(db=db, user_id=user_id)
+        return debts
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+@app.post("/assets/{user_id}", status_code=201)
+def add_asset(user_id: int, asset: AssetCreate, db: Session = Depends(get_db)):
+    try:
+        new_asset = crud.add_asset_db(db=db, user_id=user_id, category=asset.category, value=asset.value, date_added=asset.date_added)
+        return {"message": "Asset added successfully", "asset_id": new_asset.id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+
+@app.delete("/assets/{asset_id}")
+def delete_asset(asset_id: int, db: Session = Depends(get_db)):
+    try:
+        crud.delete_asset_db(db=db, asset_id=asset_id)
+        return {"message": "Asset deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+
+@app.get("/assets/{user_id}")
+def get_assets(user_id: int, db: Session = Depends(get_db)):
+    try:
+        assets = crud.get_assets_by_user(db=db, user_id=user_id)
+        return assets
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -589,6 +589,14 @@ if "budget_update_clicked" not in st.session_state:
     st.session_state.budget_update_clicked = False
 if "budget_delete_clicked" not in st.session_state:
     st.session_state.budget_delete_clicked = False
+if "delete_asset_clicked" not in st.session_state:
+    st.session_state.delete_asset_clicked=False
+if "add_asset_clicked" not in st.session_state:
+    st.session_state.add_asset_clicked=False
+if "delete_debt_clicked" not in st.session_state:
+    st.session_state.delete_debt_clicked=False
+if "add_debt_clicked" not in st.session_state:
+    st.session_state.add_debt_clicked=False
 
 
 
@@ -732,7 +740,92 @@ if st.session_state.budget_delete_clicked:
 
 
 
+# Add Debt
+if st.button("Add Debt"):
+    st.session_state.add_debt_clicked = not st.session_state.get("add_debt_clicked", False)
 
+if st.session_state.get("add_debt_clicked", False):
+    debt_category = st.text_input("Debt Category", key="debt_category")
+    debt_amount = st.number_input("Debt Amount", min_value=0.01, key="debt_amount")
+    date_incurred = st.date_input("Date Incurred", datetime.date.today(), key="date_incurred")  # Add date input
+
+
+    if st.button("Submit Debt"):
+        response = requests.post(f"http://localhost:8000/debts/{user_id}", json={"category": debt_category, "amount": debt_amount, "date_incurred":str(date_incurred)})
+        if response.status_code == 201:
+            st.success("Debt added successfully!")
+            st.rerun()
+        else:
+            st.error("Failed to add debt.")
+
+
+
+# Delete Debt
+if st.button("Delete Debt"):
+    st.session_state.delete_debt_clicked = not st.session_state.get("delete_debt_clicked", False)
+
+if st.session_state.get("delete_debt_clicked", False):
+    response = requests.get(f"http://localhost:8000/debts/{user_id}")
+    if response.status_code == 200:
+        debts = response.json()  # Expecting [{"id": 1, "category": "Credit Card"}, ...]
+        debt_options = {d["category"]: d["id"] for d in debts}  # Map category to ID
+    else:
+        st.error("Failed to fetch debts.")
+        debt_options = {}
+
+    selected_debt = st.selectbox("Select Debt to Delete", options=list(debt_options.keys()))
+
+    if st.button("Confirm Deletion"):
+        debt_id_to_delete = debt_options[selected_debt]
+        response = requests.delete(f"http://localhost:8000/debts/{debt_id_to_delete}")
+        if response.status_code == 200:
+            st.success("Debt deleted successfully!")
+            st.rerun()
+        else:
+            st.error("Failed to delete debt.")
+
+
+# Add asset
+if st.button("Add Asset"):
+    st.session_state.add_asset_clicked = not st.session_state.get("add_asset_clicked", False)
+
+if st.session_state.get("add_asset_clicked", False):
+    asset_category = st.text_input("Asset Category", key="asset_category")
+    asset_value = st.number_input("Asset Value", min_value=0.01, key="asset_value")
+    date_asset_added=st.date_input("Date Incurred", datetime.date.today(), key="date_asset_added")
+    if st.button("Submit Asset"):
+        response = requests.post(f"http://localhost:8000/assets/{user_id}", json={"category": asset_category, "value": asset_value,"date_added":str(date_asset_added)})
+        if response.status_code == 201:
+            st.success("Asset added successfully!")
+            st.rerun()
+        else:
+            st.error("Failed to add asset.")
+
+
+
+# Delete Asset
+if st.button("Delete Asset"):
+    st.session_state.delete_asset_clicked = not st.session_state.get("delete_asset_clicked", False)
+
+if st.session_state.get("delete_asset_clicked", False):
+    response = requests.get(f"http://localhost:8000/assets/{user_id}")
+    if response.status_code == 200:
+        assets = response.json()  # Expecting [{"id": 1, "category": "Savings"}, ...]
+        asset_options = {a["category"]: a["id"] for a in assets}  # Map category to ID
+    else:
+        st.error("Failed to fetch assets.")
+        asset_options = {}
+
+    selected_asset = st.selectbox("Select Asset to Delete", options=list(asset_options.keys()))
+
+    if st.button("Confirm Deletion"):
+        asset_id_to_delete = asset_options[selected_asset]
+        response = requests.delete(f"http://localhost:8000/assets/{asset_id_to_delete}")
+        if response.status_code == 200:
+            st.success("Asset deleted successfully!")
+            st.rerun()
+        else:
+            st.error("Failed to delete asset.")
 
 
 

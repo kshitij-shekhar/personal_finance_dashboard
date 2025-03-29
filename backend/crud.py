@@ -1,6 +1,9 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, text  
+from sqlalchemy import  text  
 from sqlalchemy.orm import Session
 from backend.models import User, Expense, Income, Budget
+from backend.models import Debt, Asset
+from datetime import date
+from sqlalchemy.exc import SQLAlchemyError
 
 # User CRUD Operations
 def create_user(db: Session, username: str, password: str):
@@ -139,3 +142,61 @@ def get_expense_breakdown(db: Session, user_id: int):
     except Exception as e:
         print(f"Error fetching expense breakdown: {e}")
         return []
+
+
+# Assets and Debts :
+def add_debt_db(db: Session, user_id: int, category: str, amount: float, date_incurred: date):
+    try:
+        new_debt = Debt(user_id=user_id, category=category, amount=amount, date_incurred=date_incurred)
+        db.add(new_debt)
+        db.commit()
+        db.refresh(new_debt)
+        return new_debt
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise Exception(f"Error adding debt: {str(e)}")
+
+def delete_debt_db(db: Session, debt_id: int):
+    try:
+        debt = db.query(Debt).filter(Debt.id == debt_id).first()
+        if not debt:
+            raise Exception("Debt not found")
+        db.delete(debt)
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise Exception(f"Error deleting debt: {str(e)}")
+
+def get_debts_by_user(db: Session, user_id: int):
+    try:
+        return db.query(Debt).filter(Debt.user_id == user_id).all()
+    except SQLAlchemyError as e:
+        raise Exception(f"Error fetching debts: {str(e)}")
+
+def add_asset_db(db: Session, user_id: int, category: str, value: float, date_added: date):
+    try:
+        new_asset = Asset(user_id=user_id, category=category, value=value, date_added=date_added)
+        db.add(new_asset)
+        db.commit()
+        db.refresh(new_asset)
+        return new_asset
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise Exception(f"Error adding asset: {str(e)}")
+
+def delete_asset_db(db: Session, asset_id: int):
+    try:
+        asset = db.query(Asset).filter(Asset.id == asset_id).first()
+        if not asset:
+            raise Exception("Asset not found")
+        db.delete(asset)
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise Exception(f"Error deleting asset: {str(e)}")
+
+def get_assets_by_user(db: Session, user_id: int):
+    try:
+        return db.query(Asset).filter(Asset.user_id == user_id).all()
+    except SQLAlchemyError as e:
+        raise Exception(f"Error fetching assets: {str(e)}")
