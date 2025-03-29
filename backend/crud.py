@@ -71,6 +71,9 @@ def get_incomes_by_user(db: Session, user_id: int):
     return db.query(Income).filter(Income.user_id == user_id).all()
 
 # Budget CRUD Operations
+def get_budgets_by_user(db: Session, user_id: int):
+    return db.query(Budget).filter(Budget.user_id == user_id).all()
+
 def create_budget_db(db: Session, user_id: int, category: str, budget_amount: float):
     new_budget = Budget(user_id=user_id, category=category,
                         budget_amount=budget_amount)

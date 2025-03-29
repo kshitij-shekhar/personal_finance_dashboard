@@ -48,6 +48,10 @@ class BudgetCreate(BaseModel):
     category: str
     budget_amount: float
 
+class BudgetUpdate(BaseModel):
+    new_amount: float
+
+
 # Pydantic model for login requests
 class LoginRequest(BaseModel):
     username: str
@@ -155,13 +159,18 @@ def create_budget(user_id: int, budget: BudgetCreate, db: Session = Depends(get_
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @app.put("/budgets/{budget_id}")
-def update_budget(budget_id: int, new_amount: float, db: Session = Depends(get_db)):
+def update_budget(budget_id: int, budget_update: BudgetUpdate, db: Session = Depends(get_db)):
     try:
-        updated_budget = crud.update_budget_db(db=db, budget_id=budget_id, new_amount=new_amount)
+        updated_budget = crud.update_budget_db(db=db, budget_id=budget_id, new_amount=budget_update.new_amount)
         return {"message": "Budget updated successfully", "budget_id": updated_budget.id}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+
+
 
 @app.delete("/budgets/{budget_id}")
 def delete_budget(budget_id: int, db: Session = Depends(get_db)):
@@ -170,6 +179,8 @@ def delete_budget(budget_id: int, db: Session = Depends(get_db)):
         return {"message": "Budget deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+    
+    
 
 @app.get("/budgets/{user_id}")
 def get_budgets(user_id: int, db: Session = Depends(get_db)):

@@ -290,25 +290,57 @@ def display_financial_health_check(total_income, total_expenses):
 # Function to display budget allocation
 def display_budget_allocation(user_id):
     st.header("Budget Allocation")
+
+    db: Session = SessionLocal()
+
+    # Query budgets (allocated amounts)
+    budget_query = """
+        SELECT category, budget_amount
+        FROM budgets
+        WHERE user_id = :user_id;
+    """
+    budget_results = db.execute(text(budget_query), {"user_id": user_id}).fetchall()
     
-    query = """
-        SELECT category, SUM(amount) AS total_expense 
-        FROM expenses 
-        WHERE user_id = :user_id 
+    # Query expenses (actual spending)
+    expense_query = """
+        SELECT category, SUM(amount) AS total_expense
+        FROM expenses
+        WHERE user_id = :user_id
         GROUP BY category;
     """
-    
-    db: Session = SessionLocal()
-    results = db.execute(text(query), {"user_id": user_id}).fetchall()
-    
-    categories = [row.category for row in results]
-    expenses = [row.total_expense for row in results]
+    expense_results = db.execute(text(expense_query), {"user_id": user_id}).fetchall()
 
+    db.close()  # Close DB connection
+
+    # Process budget data
+    budget_dict = {row.category: row.budget_amount for row in budget_results}
+    
+    # Process expense data
+    categories = []
+    budgeted = []
+    spent = []
+    
+    for row in expense_results:
+        category = row.category
+        actual_expense = row.total_expense
+        budgeted_amount = budget_dict.get(category, 0)  # Default to 0 if no budget set
+
+        categories.append(category)
+        spent.append(actual_expense)
+        budgeted.append(budgeted_amount)
+
+    # Create bar chart: Budget vs. Expenses
     fig_bar = go.Figure(data=[
-        go.Bar(x=categories, y=expenses)
+        go.Bar(name="Budgeted", x=categories, y=budgeted, marker_color="blue"),
+        go.Bar(name="Spent", x=categories, y=spent, marker_color="red")
     ])
     
-    fig_bar.update_layout(title="Budget Allocation by Category", xaxis_title="Category", yaxis_title="Total Expenses")
+    fig_bar.update_layout(
+        title="Budget vs. Actual Expenses",
+        xaxis_title="Category",
+        yaxis_title="Amount",
+        barmode="group"  # Show bars side by side
+    )
     
     st.plotly_chart(fig_bar)
 
@@ -617,6 +649,8 @@ if st.session_state.income_clicked:
         else:
             st.error(f"Failed to add income. Server response: {response.text}")
 
+
+
 # -------------------- Create New Budget --------------------
 if st.button("Create New Budget"):
     st.session_state.budget_create_clicked = not(st.session_state.budget_create_clicked)
@@ -627,42 +661,74 @@ if st.session_state.budget_create_clicked:
 
     if st.button("Submit Budget"):
         response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": budget_category, "budget_amount": budget_amount})
-        if response.status_code == 200:
+        if response.status_code == 201:
             st.success("Budget created successfully!")
-            st.session_state.budget_create_clicked = False
         else:
             st.error("Failed to create budget.")
 
+
+
 # -------------------- Update Budget --------------------
 if st.button("Update Budget"):
-    st.session_state.budget_update_clicked = True
+    st.session_state.budget_update_clicked = not(st.session_state.budget_update_clicked)
 
 if st.session_state.budget_update_clicked:
-    budget_id_to_update = st.number_input("Budget ID to Update", key="budget_id_update")
+    # Fetch budget categories from backend
+    response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+    if response.status_code == 200:
+        categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+        category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+
+        # Dropdown for category selection
+        selected_category = st.selectbox("Select Category", options=list(category_options.keys()), key="selected_category")
+
+        # Get the corresponding budget ID
+        budget_id_to_update = category_options[selected_category]
+    else:
+        st.error("Failed to fetch budget categories.")
+        category_options = {}
+        budget_id_to_update = None
+
     new_budget_amount = st.number_input("New Budget Amount", min_value=0.01, key="new_budget_amount")
 
-    if st.button("Submit Update"):
-        response = requests.put(f"http://localhost:8000/budgets/{budget_id_to_update}", json={"budget_amount": new_budget_amount})
+    if st.button("Submit Update") and budget_id_to_update is not None:
+        payload = {"new_amount": new_budget_amount}  # Matches the Pydantic model
+        response = requests.put(
+            f"http://localhost:8000/budgets/{budget_id_to_update}", json=payload
+        )
         if response.status_code == 200:
             st.success("Budget updated successfully!")
-            st.session_state.budget_update_clicked = False
+            st.rerun()
         else:
-            st.error("Failed to update budget.")
+            st.error(f"Failed to update budget. Server response: {response.text}")
+
 
 # -------------------- Delete Budget --------------------
 if st.button("Delete Budget"):
-    st.session_state.budget_delete_clicked = True
+    st.session_state.budget_delete_clicked = not(st.session_state.budget_delete_clicked)
 
 if st.session_state.budget_delete_clicked:
-    budget_id_to_delete = st.number_input("Budget ID to Delete", key="budget_id_delete")
+    # Fetch budget categories
+    response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+    if response.status_code == 200:
+        categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+        category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+    else:
+        st.error("Failed to fetch budget categories.")
+        category_options = {}
 
-    if st.button("Confirm Deletion"):
-        response = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
-        if response.status_code == 200:
-            st.success("Budget deleted successfully!")
-            st.session_state.budget_delete_clicked = False
-        else:
-            st.error("Failed to delete budget.")
+    if category_options:
+        selected_category = st.selectbox("Select Category to Delete", options=list(category_options.keys()), key="category_delete")
+        budget_id_to_delete = category_options[selected_category]
+
+        if st.button("Confirm Deletion"):
+            response = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
+            if response.status_code == 200:
+                st.success("Budget deleted successfully!")
+                st.rerun()
+            else:
+                st.error(f"Failed to delete budget. Server response: {response.text}")
+
 
 
 
