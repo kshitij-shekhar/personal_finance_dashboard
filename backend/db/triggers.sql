@@ -1,40 +1,42 @@
--- Expense audit trigger
-CREATE TABLE IF NOT EXISTS expense_audit (
-    audit_id SERIAL PRIMARY KEY,
-    expense_id INT,
-    old_amount DECIMAL(10,2),
-    new_amount DECIMAL(10,2),
-    changed_at TIMESTAMP
-);
+-- -- Expense audit trigger
+-- CREATE TABLE IF NOT EXISTS expense_audit (
+--     audit_id SERIAL PRIMARY KEY,
+--     expense_id INT,
+--     old_amount DECIMAL(10,2),
+--     new_amount DECIMAL(10,2),
+--     changed_at TIMESTAMP
+-- );
 
-CREATE OR REPLACE FUNCTION log_expense_changes()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF NEW.amount <> OLD.amount THEN
-        INSERT INTO expense_audit(expense_id, old_amount, new_amount, changed_at)
-        VALUES (OLD.id, OLD.amount, NEW.amount, NOW());
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE PLPGSQL;
+-- CREATE OR REPLACE FUNCTION log_expense_changes()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--     IF NEW.amount <> OLD.amount THEN
+--         INSERT INTO expense_audit(expense_id, old_amount, new_amount, changed_at)
+--         VALUES (OLD.id, OLD.amount, NEW.amount, NOW());
+--     END IF;
+--     RETURN NEW;
+-- END;
+-- $$ LANGUAGE PLPGSQL;
 
-CREATE TRIGGER expense_update_trigger
-AFTER UPDATE ON expenses
-FOR EACH ROW EXECUTE PROCEDURE log_expense_changes();
-
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+-- CREATE TRIGGER expense_update_trigger
+-- AFTER UPDATE ON expenses
+-- FOR EACH ROW EXECUTE PROCEDURE log_expense_changes();
 
 
+-- CREATE OR REPLACE FUNCTION update_updated_at_column()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--     NEW.updated_at = CURRENT_TIMESTAMP;
+--     RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 
---Trigger for income updates 
+
+
+-- This trigger is fired when an income is deleted
+-- The income in the income table is deleted, and the total_income in income_expense_summary table 
+-- is reduced by <income> amount
 CREATE OR REPLACE FUNCTION update_income_summary()
 RETURNS TRIGGER AS $$
 BEGIN

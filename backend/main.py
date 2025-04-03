@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func,text
 from backend.models import Income,Expense
 from pydantic import BaseModel
+from psycopg2.errors import RaiseException
+from sqlalchemy.exc import IntegrityError
 # from passlib.context import CryptContext
 # from typing import Optional
 import crud
@@ -261,13 +263,7 @@ def get_debts(user_id: int, db: Session = Depends(get_db)):
 
 
 
-# @app.post("/assets/{user_id}", status_code=201)
-# def add_asset(user_id: int, asset: AssetCreate, db: Session = Depends(get_db)):
-#     try:
-#         new_asset = crud.add_asset_db(db=db, user_id=user_id, category=asset.category, value=asset.value, date_added=asset.date_added)
-#         return {"message": "Asset added successfully", "asset_id": new_asset.id}
-#     except Exception as e:
-#         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @app.post("/assets/{user_id}", status_code=201)
@@ -277,9 +273,13 @@ def add_asset(user_id: int, asset: AssetCreate, db: Session = Depends(get_db)):
         return {"message": "Asset added successfully", "asset_id": new_asset.id}
     except Exception as e:
         error_message = str(e)  # Extract the error message
+        # print("Error Message : ",error_message)
         if "Asset value cannot be negative" in error_message:
+            print("HELLO")
             raise HTTPException(status_code=400, detail="Error: Asset value cannot be negative.")
         raise HTTPException(status_code=400, detail=f"Failed to add asset: {error_message}")
+
+
 
 
 

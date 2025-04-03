@@ -1,4 +1,8 @@
 
+-- Calculates current_amount in savings_goals. This is the current savings for the month
+-- Called inside display_savings_recommendations function in app.py
+-- Is updated everytime something is submitted through a button(st.rerun())
+
 CREATE OR REPLACE PROCEDURE update_savings(user_id_param INT)
 LANGUAGE PLPGSQL AS $$
 DECLARE

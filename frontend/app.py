@@ -583,7 +583,7 @@ def display_debt_management(user_id):
 def display_asset_management(user_id):
     st.header("Asset Management Insights")
 
-    # Corrected query to fetch category-wise asset values
+    # query to fetch category-wise asset values
     query_assets = "SELECT * FROM get_assets_by_category(:user_id);"
 
 
@@ -597,7 +597,6 @@ def display_asset_management(user_id):
     
     fig_assets_pie = go.Figure(data=[go.Pie(labels=asset_categories, values=asset_values)])
     
-    # Add total asset value as an annotation in the top-right corner
     fig_assets_pie.update_layout(
         # title="Asset Distribution by Category",
         annotations=[
