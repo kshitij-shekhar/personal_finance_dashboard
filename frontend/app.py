@@ -7,9 +7,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.database import SessionLocal, engine
 from backend import crud
-import datetime
+from datetime import datetime,timedelta
 st.set_page_config(layout="wide")
 # Initialize session states for user authentication
+
+def update_savings_on_login(user_id):
+    db = SessionLocal()
+    try:
+        db.execute(text("CALL update_savings(:user_id_param)"), {"user_id_param": user_id})
+        db.commit()
+    finally:
+        db.close()
+
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 
@@ -25,6 +34,7 @@ def authenticate_user():
             response = requests.post(f"http://localhost:8000/login", json={"username": username, "password": password})
             if response.status_code == 200:
                 st.session_state.user_id = response.json()['user_id']  # Store user ID in session state
+                # update_savings_on_login(st.session_state.user_id)
                 st.success("Login successful!")
                 st.rerun()  # Refresh to show dashboard
             else:
@@ -56,6 +66,40 @@ def fetch_user_data(user_id):
     
     return total_income, total_expenses
 
+
+
+# Initialize session state variables
+if "expense_clicked" not in st.session_state:
+    st.session_state.expense_clicked = False
+if "income_clicked" not in st.session_state:
+    st.session_state.income_clicked = False
+if "budget_create_clicked" not in st.session_state:
+    st.session_state.budget_create_clicked = False
+if "budget_update_clicked" not in st.session_state:
+    st.session_state.budget_update_clicked = False
+if "budget_delete_clicked" not in st.session_state:
+    st.session_state.budget_delete_clicked = False
+if "delete_asset_clicked" not in st.session_state:
+    st.session_state.delete_asset_clicked=False
+if "add_asset_clicked" not in st.session_state:
+    st.session_state.add_asset_clicked=False
+if "delete_debt_clicked" not in st.session_state:
+    st.session_state.delete_debt_clicked=False
+if "add_debt_clicked" not in st.session_state:
+    st.session_state.add_debt_clicked=False
+
+
+
+
+def fetch_totals():
+    user_id=st.session_state.user_id
+    response = requests.get(f"http://localhost:8000/totals/{user_id}")
+    if response.status_code == 200:
+        return response.json()
+    return {"total_income": 0, "total_expenses": 0, "net_savings": 0}
+
+#  Fetch fresh totals on every run
+totals = fetch_totals()
 
 def populate_income_expense_summary(user_id):
     """
@@ -182,7 +226,7 @@ def display_expense_heatmap(user_id):
 
 # Function to display financial health check
 def display_financial_health_check(total_income, total_expenses):
-    st.header("Financial Health Check")
+    # st.header("Financial Health Check")
     
     financial_health_score = (total_income - total_expenses) / total_income * 100 if total_income > 0 else 0
     
@@ -203,12 +247,19 @@ def display_financial_health_check(total_income, total_expenses):
     
     st.plotly_chart(fig_gauge)
 
-# Function to display budget allocation
+
+
 def display_budget_allocation(user_id):
-    st.header("Budget Allocation")
-
+    # st.header("Budget Allocation")
+    
     db: Session = SessionLocal()
-
+    
+    # Allow user to select a month
+    selected_month = st.selectbox("Select Month:", [
+        (datetime.today().replace(day=1) - timedelta(days=30*i)).strftime('%Y-%m')
+        for i in range(12)
+    ])
+    
     # Query budgets (allocated amounts)
     budget_query = """
         SELECT category, budget_amount
@@ -217,17 +268,19 @@ def display_budget_allocation(user_id):
     """
     budget_results = db.execute(text(budget_query), {"user_id": user_id}).fetchall()
     
-    # Query expenses (actual spending)
+    # Query expenses for the selected month
     expense_query = """
         SELECT category, SUM(amount) AS total_expense
         FROM expenses
         WHERE user_id = :user_id
+        AND date_trunc('month', date) = date_trunc('month', TO_TIMESTAMP(:selected_month, 'YYYY-MM'))
         GROUP BY category;
+
     """
-    expense_results = db.execute(text(expense_query), {"user_id": user_id}).fetchall()
-
+    expense_results = db.execute(text(expense_query), {"user_id": user_id, "selected_month": selected_month}).fetchall()
+    
     db.close()  # Close DB connection
-
+    
     # Process budget data
     budget_dict = {row.category: row.budget_amount for row in budget_results}
     
@@ -240,11 +293,11 @@ def display_budget_allocation(user_id):
         category = row.category
         actual_expense = row.total_expense
         budgeted_amount = budget_dict.get(category, 0)  # Default to 0 if no budget set
-
+        
         categories.append(category)
         spent.append(actual_expense)
         budgeted.append(budgeted_amount)
-
+    
     # Create bar chart: Budget vs. Expenses
     fig_bar = go.Figure(data=[
         go.Bar(name="Budgeted", x=categories, y=budgeted, marker_color="blue"),
@@ -252,7 +305,7 @@ def display_budget_allocation(user_id):
     ])
     
     fig_bar.update_layout(
-        title="Budget vs. Actual Expenses",
+        title=f"Budget vs. Actual Expenses ({selected_month})",
         xaxis_title="Category",
         yaxis_title="Amount",
         barmode="group"  # Show bars side by side
@@ -260,9 +313,10 @@ def display_budget_allocation(user_id):
     
     st.plotly_chart(fig_bar)
 
+
 # Function to display net worth tracker
 def display_net_worth_tracker(user_id):
-    st.header("Net Worth Tracker")
+    # st.header("Net Worth Tracker")
     
     query_assets = """
         SELECT get_net_worth(:user_id)
@@ -322,24 +376,121 @@ def calculate_liabilities(user_id):
 
 
 # Function to display savings recommendations
-def display_savings_recommendations(total_income, total_expenses):
+
+def display_savings_recommendations(user_id):
     st.header("Savings Recommendations")
+
+    db = SessionLocal()
+
+    # Call the stored procedure to update savings before fetching data
+    db.execute(text("CALL update_savings(:user_id)"), {"user_id": user_id})
+    db.commit()  # Ensure changes are saved
+
+    # Fetch updated savings data for the current month from income_expense_summary
+    # query = """
+    #     SELECT COALESCE(SUM(total_income - total_expenses), 0) AS current_savings
+    #     FROM income_expense_summary 
+    #     WHERE user_id = :user_id 
+    #     AND year = EXTRACT(YEAR FROM CURRENT_DATE)
+    #     AND month = EXTRACT(MONTH FROM CURRENT_DATE)
+    # """
+    # current_savings_result = db.execute(text(query), {"user_id": user_id}).fetchone()
+
+    query = """
+        SELECT COALESCE(current_amount, 0) AS current_savings
+        FROM savings_goals
+        WHERE user_id = :user_id 
+        AND month = date_trunc('month', CURRENT_DATE)
+    """
+    current_savings_result = db.execute(text(query), {"user_id": user_id}).fetchone()
+
+
+
+    # Fetch goal amount from savings_goals
+    query_goal = """
+        SELECT goal_amount FROM savings_goals 
+        WHERE user_id = :user_id 
+        AND month = date_trunc('month', CURRENT_DATE)
+    """
+    goal_result = db.execute(text(query_goal), {"user_id": user_id}).fetchone()
+
+    db.close()
+
+    # Get values
+    current_savings = current_savings_result[0] if current_savings_result else 0
+    goal_amount = goal_result[0] if goal_result else 0
+
+    recommended_savings = 0.2 * float(current_savings + goal_amount)  # Example 20% rule
+
+    # Visualization
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=["Current Savings", "Recommended Savings", "Goal"],
+        y=[current_savings, recommended_savings, goal_amount],
+        marker_color=['blue', 'green', 'orange']
+    ))
+
+    st.plotly_chart(fig)
+
+
+
+# def display_savings_recommendations(user_id):
+#     st.header("Savings Recommendations")
+
+#     db = SessionLocal()
     
-    monthly_savings_rate = (total_income - total_expenses) / total_income * 100 if total_income > 0 else 0
-    print(type(total_income), type(0.20))
-    recommended_savings = float(total_income) * 0.20  # Recommend saving 20% of income
+#     # Fetch savings data for the current month from income_expense_summary
+#     query = """
+#         SELECT COALESCE(SUM(total_income - total_expenses), 0) AS current_savings
+#         FROM income_expense_summary 
+#         WHERE user_id = :user_id 
+#         AND year = EXTRACT(YEAR FROM CURRENT_DATE)
+#         AND month = EXTRACT(MONTH FROM CURRENT_DATE)
+#     """
+#     current_savings_result = db.execute(text(query), {"user_id": user_id}).fetchone()
     
-    st.write(f"**Current Savings Rate:** {monthly_savings_rate:.2f}%")
-    st.write(f"**Recommended Monthly Savings:** ${recommended_savings:.2f}")
+#     # Fetch goal amount from savings_goals
+#     query_goal = """
+#         SELECT goal_amount FROM savings_goals 
+#         WHERE user_id = :user_id 
+#         AND month = date_trunc('month', CURRENT_DATE)
+#     """
+#     goal_result = db.execute(text(query_goal), {"user_id": user_id}).fetchone()
     
-    if (total_income - total_expenses) < recommended_savings:
-        st.warning("You are not saving enough! Consider increasing your monthly savings.")
-    else:
-        st.success("Great job! You are meeting your savings goals.")
+#     db.close()
+
+#     # Get values
+#     current_savings = current_savings_result[0] if current_savings_result else 0
+#     goal_amount = goal_result[0] if goal_result else 0
+
+#     recommended_savings = 0.2 * float(current_savings + goal_amount)  # Example 20% rule
+
+#     # # Display the values
+#     # st.write(f"**Current Savings for the Month:** ${current_savings:.2f}")
+#     # st.write(f"**Recommended Monthly Savings:** ${recommended_savings:.2f}")
+#     # st.write(f"**Savings Goal for the Month:** ${goal_amount:.2f}")
+
+#     # Visualization
+#     fig = go.Figure()
+#     fig.add_trace(go.Bar(
+#         x=["Current Savings", "Recommended Savings", "Goal"],
+#         y=[current_savings, recommended_savings, goal_amount],
+#         marker_color=['blue', 'green', 'orange']
+#     ))
+
+#     # fig.update_layout(title="Savings Comparison")
+#     st.plotly_chart(fig)
+
+
+
+
+
+
+
 
 # Function to display total liabilities as an indicator
 def display_liabilities(user_id):
-    st.header("Total Liabilities")
+    # st.header("Total Liabilities")
     
     total_liabilities = calculate_liabilities(user_id)
     
@@ -356,7 +507,7 @@ def display_liabilities(user_id):
 
 # Function to display net financial position
 def display_net_financial_position(user_id):
-    st.header("Net Financial Position")
+    st.header("Net Financial Position (Current Savings - Total Liabilities)")
     
     # total_income, total_expenses = fetch_user_data(user_id)
     
@@ -386,8 +537,7 @@ def display_net_financial_position(user_id):
         line=dict(color='blue')
     ))
     
-    fig_net_position.update_layout(title="Net Financial Position Over Time",
-                                    xaxis_title="Month/Year",
+    fig_net_position.update_layout(xaxis_title="Month/Year",
                                     yaxis_title="Net Position ($)")
     
     st.plotly_chart(fig_net_position)
@@ -414,7 +564,7 @@ def display_debt_management(user_id):
     
     # Add total debt value as an annotation in the top-right corner
     fig_debt_pie.update_layout(
-        title="Debt Distribution by Category",
+        # title="Debt Distribution by Category",
         annotations=[
             dict(
                 x=1.2, y=1.2,  # Position in the top-right
@@ -432,33 +582,83 @@ def display_debt_management(user_id):
 # Function to display asset management insights
 def display_asset_management(user_id):
     st.header("Asset Management Insights")
-    
-    query_assets = """SELECT get_total_assets(:user_id)
-    """
-    
+
+    # Corrected query to fetch category-wise asset values
+    query_assets = "SELECT * FROM get_assets_by_category(:user_id);"
+
+
     db: Session = SessionLocal()
     results_assets = db.execute(text(query_assets), {"user_id": user_id}).fetchall()
 
-    asset_categories = [row.category for row in results_assets]
-    asset_values = [row.total_value for row in results_assets]
+    # Correctly extracting values from tuples
+    asset_categories = [row[0] for row in results_assets]  # row[0] is 'category'
+    asset_values = [row[1] for row in results_assets]  # row[1] is 'total_value'
     total_assets = sum(asset_values)  # Calculate total asset value
     
     fig_assets_pie = go.Figure(data=[go.Pie(labels=asset_categories, values=asset_values)])
     
     # Add total asset value as an annotation in the top-right corner
     fig_assets_pie.update_layout(
-        title="Asset Distribution by Category",
+        # title="Asset Distribution by Category",
         annotations=[
             dict(
                 x=1.1, y=1.2,  # Position in the top-right
                 text=f"Total Assets: ${total_assets:.2f}",
                 showarrow=False,
-                font=dict(size=14, color="White")
+                font=dict(size=14, color="white")
             )
         ]
     )
     
     st.plotly_chart(fig_assets_pie)
+
+
+def delete_income(user_id):
+    db = SessionLocal()
+    income_entries = db.execute("""
+        SELECT id, source, amount, date FROM income WHERE user_id = :user_id
+    """, {"user_id": user_id}).fetchall()
+    db.close()
+    
+    if not income_entries:
+        st.warning("No income entries found.")
+        return
+    
+    selected_income = st.selectbox("Select income to delete:", 
+                                   [f"{entry.id}: {entry.source} - ${entry.amount} ({entry.date})" for entry in income_entries])
+    
+    if st.button("Delete Income"):
+        db = SessionLocal()
+        income_id = int(selected_income.split(':')[0])
+        db.execute("DELETE FROM income WHERE id = :income_id", {"income_id": income_id})
+        db.commit()
+        db.close()
+        st.success("Income deleted successfully!")
+        st.rerun()
+
+
+def delete_expense(user_id):
+    db = SessionLocal()
+    expense_entries = db.execute("""
+        SELECT id, category, amount, date FROM expenses WHERE user_id = :user_id
+    """, {"user_id": user_id}).fetchall()
+    db.close()
+    
+    if not expense_entries:
+        st.warning("No expense entries found.")
+        return
+    
+    selected_expense = st.selectbox("Select expense to delete:", 
+                                    [f"{entry.id}: {entry.category} - ${entry.amount} ({entry.date})" for entry in expense_entries])
+    
+    if st.button("Delete Expense"):
+        db = SessionLocal()
+        expense_id = int(selected_expense.split(':')[0])
+        db.execute("DELETE FROM expenses WHERE id = :expense_id", {"expense_id": expense_id})
+        db.commit()
+        db.close()
+        st.success("Expense deleted successfully!")
+        st.rerun()
 
 
 
@@ -524,7 +724,7 @@ else:
     # ------------------------------
     
     # Display Income vs Expenses Chart
-    populate_income_expense_summary(st.session_state.user_id)
+    # populate_income_expense_summary(st.session_state.user_id)
 
     col_left, col_middle, col_right = st.columns([1, 1, 1])
 
@@ -532,11 +732,54 @@ else:
     with col_left:
         # st.subheader("Income vs. Expenses Over Time")
         display_income_vs_expenses_chart(st.session_state.user_id)  # Call the function that plots this chart
+        
+        # -------------------- Add Expense Button--------------------
+        if st.button("Add Expense"):
+            st.session_state.expense_clicked = not(st.session_state.expense_clicked)
+
+        if st.session_state.expense_clicked:
+            user_id=st.session_state.user_id
+            category = st.text_input("Category", key="expense_category")
+            amount = st.number_input("Amount", min_value=0.01, key="expense_amount")
+            date = st.date_input("Date", value=datetime.today(), key="expense_date")
+
+            if st.button("Submit Expense"):
+                payload = {"category": category, "amount": amount,"date":str(date)}
+
+                response = requests.post(f"http://localhost:8000/add-expense/{user_id}", json=payload)
+                
+                if response.status_code == 201:
+                    st.success("Expense added successfully!")
+                    st.rerun()
+                else:
+                    st.error(f"Failed to add expense. Server response: {response.text}")
+        delete_expense(user_id)
+
 
     # Middle Column: Expenses Heatmap
     with col_middle:
         # st.subheader("Expenses Heatmap")
         display_expense_heatmap(st.session_state.user_id)  # Call the function that plots this chart
+        
+        # -------------------- Add Income Button--------------------
+        if st.button("Add Income"):
+            st.session_state.income_clicked = not(st.session_state.income_clicked)
+
+        if st.session_state.income_clicked:
+            user_id=st.session_state.user_id
+            source = st.text_input("Income Source", key="income_source")
+            amount_income = st.number_input("Income Amount", min_value=0.01, key="income_amount")
+            date = st.date_input("Date", value=datetime.today()) 
+
+            if st.button("Submit Income"):
+                response = requests.post(f"http://localhost:8000/add-income/{user_id}", json={"source": source, "amount": amount_income,"date":str(date)})
+                if response.status_code ==201:
+                    st.success("Income added successfully!")
+                    st.rerun()
+                else:
+                    st.error(f"Failed to add income. Server response: {response.text}")
+
+        delete_income(user_id)
 
     # Right Column: Expenses by Category
     with col_right:
@@ -554,294 +797,443 @@ else:
         else:
             st.warning("No expense data available.")  # Call the function that plots this chart
 
+        
+
 
     
-
-   
-   
-
-    
-
-
     total_income, total_expenses = fetch_user_data(user_id)
     col_left1, col_middle1, col_right1 = st.columns([1, 1, 1])
+
     # Display all sections
     with col_left1:
-        display_savings_recommendations(total_income, total_expenses)
+        display_savings_recommendations(user_id)
     with col_middle1:
         display_liabilities(user_id)
     with col_right1:
         display_net_financial_position(user_id)
 
+
+
     col_left2, col_middle2, col_right2 = st.columns([1, 1, 1])
     # Display all sections
     with col_left2:
         display_financial_health_check(total_income,total_expenses)
+
+
+        # -------------------- Create New Budget --------------------
+        if st.button("Create New Budget"):
+            st.session_state.budget_create_clicked = not(st.session_state.budget_create_clicked)
+
+        if st.session_state.budget_create_clicked:
+            budget_category = st.text_input("Budget Category", key="budget_category")
+            budget_amount = st.number_input("Budget Amount", min_value=0.01, key="budget_amount")
+
+            if st.button("Submit Budget"):
+                response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": budget_category, "budget_amount": budget_amount})
+                if response.status_code == 201:
+                    st.success("Budget created successfully!")
+                else:
+                    st.error("Failed to create budget.")
+
+
     with col_middle2:
         display_budget_allocation(user_id)
+
+        # -------------------- Update Budget --------------------
+        if st.button("Update Budget"):
+            st.session_state.budget_update_clicked = not(st.session_state.budget_update_clicked)
+
+        if st.session_state.budget_update_clicked:
+            # Fetch budget categories from backend
+            response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+            if response.status_code == 200:
+                categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+                category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+
+                # Dropdown for category selection
+                selected_category = st.selectbox("Select Category", options=list(category_options.keys()), key="selected_category")
+
+                # Get the corresponding budget ID
+                budget_id_to_update = category_options[selected_category]
+            else:
+                st.error("Failed to fetch budget categories.")
+                category_options = {}
+                budget_id_to_update = None
+
+            new_budget_amount = st.number_input("New Budget Amount", min_value=0.01, key="new_budget_amount")
+
+            if st.button("Submit Update") and budget_id_to_update is not None:
+                payload = {"new_amount": new_budget_amount}  # Matches the Pydantic model
+                response = requests.put(
+                    f"http://localhost:8000/budgets/{budget_id_to_update}", json=payload
+                )
+                if response.status_code == 200:
+                    st.success("Budget updated successfully!")
+                    st.rerun()
+                else:
+                    st.error(f"Failed to update budget. Server response: {response.text}")
+
+
     with col_right2:
         display_net_worth_tracker(user_id)
-    
-    
+        # -------------------- Delete Budget --------------------
+        if st.button("Delete Budget"):
+            st.session_state.budget_delete_clicked = not(st.session_state.budget_delete_clicked)
+
+        if st.session_state.budget_delete_clicked:
+            # Fetch budget categories
+            response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+            if response.status_code == 200:
+                categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+                category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+            else:
+                st.error("Failed to fetch budget categories.")
+                category_options = {}
+
+            if category_options:
+                selected_category = st.selectbox("Select Category to Delete", options=list(category_options.keys()), key="category_delete")
+                budget_id_to_delete = category_options[selected_category]
+
+                if st.button("Confirm Deletion"):
+                    response = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
+                    if response.status_code == 200:
+                        st.success("Budget deleted successfully!")
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to delete budget. Server response: {response.text}")
+
     col_left3,col_right3=st.columns([1,1])
     with col_left3:
         display_asset_management(user_id)
+
+        # Add asset
+        if st.button("Add Asset"):
+            st.session_state.add_asset_clicked = not st.session_state.get("add_asset_clicked", False)
+
+        if st.session_state.get("add_asset_clicked", False):
+            asset_category = st.text_input("Asset Category", key="asset_category")
+            # asset_value = st.number_input("Asset Value", min_value=0.01, key="asset_value")
+            asset_value = st.number_input("Asset Value", key="asset_value")
+            date_asset_added=st.date_input("Date Incurred", datetime.today(), key="date_asset_added")
+            if st.button("Submit Asset"):
+                response = requests.post(f"http://localhost:8000/assets/{user_id}", json={"category": asset_category, "value": asset_value,"date_added":str(date_asset_added)})
+                if response.status_code == 201:
+                    st.success("Asset added successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to add asset.")
+
+        # Delete Asset
+        if st.button("Delete Asset"):
+            st.session_state.delete_asset_clicked = not st.session_state.get("delete_asset_clicked", False)
+
+        if st.session_state.get("delete_asset_clicked", False):
+            response = requests.get(f"http://localhost:8000/assets/{user_id}")
+            if response.status_code == 200:
+                assets = response.json()  # Expecting [{"id": 1, "category": "Savings"}, ...]
+                asset_options = {a["category"]: a["id"] for a in assets}  # Map category to ID
+            else:
+                st.error("Failed to fetch assets.")
+                asset_options = {}
+
+            selected_asset = st.selectbox("Select Asset to Delete", options=list(asset_options.keys()))
+
+            if st.button("Confirm Deletion"):
+                asset_id_to_delete = asset_options[selected_asset]
+                response = requests.delete(f"http://localhost:8000/assets/{asset_id_to_delete}")
+                if response.status_code == 200:
+                    st.success("Asset deleted successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to delete asset.")
+                
+    
     with col_right3:
         display_debt_management(user_id)
+        # Add Debt
+        if st.button("Add Debt"):
+            st.session_state.add_debt_clicked = not st.session_state.get("add_debt_clicked", False)
 
-# ------------------------------
-# Action Buttons Section
-# ------------------------------
-st.header("Manage Your Finances")
-
-# Initialize session state variables
-if "expense_clicked" not in st.session_state:
-    st.session_state.expense_clicked = False
-if "income_clicked" not in st.session_state:
-    st.session_state.income_clicked = False
-if "budget_create_clicked" not in st.session_state:
-    st.session_state.budget_create_clicked = False
-if "budget_update_clicked" not in st.session_state:
-    st.session_state.budget_update_clicked = False
-if "budget_delete_clicked" not in st.session_state:
-    st.session_state.budget_delete_clicked = False
-if "delete_asset_clicked" not in st.session_state:
-    st.session_state.delete_asset_clicked=False
-if "add_asset_clicked" not in st.session_state:
-    st.session_state.add_asset_clicked=False
-if "delete_debt_clicked" not in st.session_state:
-    st.session_state.delete_debt_clicked=False
-if "add_debt_clicked" not in st.session_state:
-    st.session_state.add_debt_clicked=False
+        if st.session_state.get("add_debt_clicked", False):
+            debt_category = st.text_input("Debt Category", key="debt_category")
+            debt_amount = st.number_input("Debt Amount", min_value=0.01, key="debt_amount")
+            date_incurred = st.date_input("Date Incurred", datetime.today(), key="date_incurred")  # Add date input
 
 
+            if st.button("Submit Debt"):
+                response = requests.post(f"http://localhost:8000/debts/{user_id}", json={"category": debt_category, "amount": debt_amount, "date_incurred":str(date_incurred)})
+                if response.status_code == 201:
+                    st.success("Debt added successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to add debt.")
 
 
-def fetch_totals():
-    user_id=st.session_state.user_id
-    response = requests.get(f"http://localhost:8000/totals/{user_id}")
-    if response.status_code == 200:
-        return response.json()
-    return {"total_income": 0, "total_expenses": 0, "net_savings": 0}
+        #       Delete Debt
+        if st.button("Delete Debt"):
+            st.session_state.delete_debt_clicked = not st.session_state.get("delete_debt_clicked", False)
 
-#  Fetch fresh totals on every run
-totals = fetch_totals()
+        if st.session_state.get("delete_debt_clicked", False):
+            response = requests.get(f"http://localhost:8000/debts/{user_id}")
+            if response.status_code == 200:
+                debts = response.json()  # Expecting [{"id": 1, "category": "Credit Card"}, ...]
+                debt_options = {d["category"]: d["id"] for d in debts}  # Map category to ID
+            else:
+                st.error("Failed to fetch debts.")
+                debt_options = {}
+
+            selected_debt = st.selectbox("Select Debt to Delete", options=list(debt_options.keys()))
+
+            if st.button("Confirm Deletion"):
+                debt_id_to_delete = debt_options[selected_debt]
+                response = requests.delete(f"http://localhost:8000/debts/{debt_id_to_delete}")
+                if response.status_code == 200:
+                    st.success("Debt deleted successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to delete debt.")
+                
+
+
+
+def delete_income(user_id):
+    db = SessionLocal()
+    income_entries = db.execute("""
+        SELECT id, category, amount, date FROM income WHERE user_id = :user_id
+    """, {"user_id": user_id}).fetchall()
+    db.close()
+    
+    if not income_entries:
+        st.warning("No income entries found.")
+        return
+    
+    selected_income = st.selectbox("Select income to delete:", 
+                                   [f"{entry.id}: {entry.category} - ${entry.amount} ({entry.date})" for entry in income_entries])
+    
+    if st.button("Delete Income"):
+        db = SessionLocal()
+        income_id = int(selected_income.split(':')[0])
+        db.execute("DELETE FROM income WHERE id = :income_id", {"income_id": income_id})
+        db.commit()
+        db.close()
+        st.success("Income deleted successfully!")
+        st.rerun()
 
 
 
 
 
+# # -------------------- Add Expense --------------------
+# if st.button("Add Expense"):
+#     st.session_state.expense_clicked = not(st.session_state.expense_clicked)
 
-# -------------------- Add Expense --------------------
-if st.button("Add Expense"):
-    st.session_state.expense_clicked = not(st.session_state.expense_clicked)
+# if st.session_state.expense_clicked:
+#     user_id=st.session_state.user_id
+#     category = st.text_input("Category", key="expense_category")
+#     amount = st.number_input("Amount", min_value=0.01, key="expense_amount")
+#     date = st.date_input("Date", value=datetime.today(), key="expense_date")
 
-if st.session_state.expense_clicked:
-    user_id=st.session_state.user_id
-    category = st.text_input("Category", key="expense_category")
-    amount = st.number_input("Amount", min_value=0.01, key="expense_amount")
-    date = st.date_input("Date", value=datetime.date.today(), key="expense_date")
+#     if st.button("Submit Expense"):
+#         payload = {"category": category, "amount": amount,"date":str(date)}
 
-    if st.button("Submit Expense"):
-        payload = {"category": category, "amount": amount,"date":str(date)}
-
-        response = requests.post(f"http://localhost:8000/add-expense/{user_id}", json=payload)
+#         response = requests.post(f"http://localhost:8000/add-expense/{user_id}", json=payload)
         
-        if response.status_code == 201:
-            st.success("Expense added successfully!")
-            st.rerun()
-        else:
-            st.error(f"Failed to add expense. Server response: {response.text}")
+#         if response.status_code == 201:
+#             st.success("Expense added successfully!")
+#             st.rerun()
+#         else:
+#             st.error(f"Failed to add expense. Server response: {response.text}")
 
 
 
 # -------------------- Add Income --------------------
-if st.button("Add Income"):
-    st.session_state.income_clicked = not(st.session_state.income_clicked)
+# if st.button("Add Income"):
+#     st.session_state.income_clicked = not(st.session_state.income_clicked)
 
-if st.session_state.income_clicked:
-    user_id=st.session_state.user_id
-    source = st.text_input("Income Source", key="income_source")
-    amount_income = st.number_input("Income Amount", min_value=0.01, key="income_amount")
-    date = st.date_input("Date", value=datetime.date.today()) 
+# if st.session_state.income_clicked:
+#     user_id=st.session_state.user_id
+#     source = st.text_input("Income Source", key="income_source")
+#     amount_income = st.number_input("Income Amount", min_value=0.01, key="income_amount")
+#     date = st.date_input("Date", value=datetime.today()) 
 
-    if st.button("Submit Income"):
-        response = requests.post(f"http://localhost:8000/add-income/{user_id}", json={"source": source, "amount": amount_income,"date":str(date)})
-        if response.status_code ==201:
-            st.success("Income added successfully!")
-            st.rerun()
-        else:
-            st.error(f"Failed to add income. Server response: {response.text}")
+#     if st.button("Submit Income"):
+#         response = requests.post(f"http://localhost:8000/add-income/{user_id}", json={"source": source, "amount": amount_income,"date":str(date)})
+#         if response.status_code ==201:
+#             st.success("Income added successfully!")
+#             st.rerun()
+#         else:
+#             st.error(f"Failed to add income. Server response: {response.text}")
 
 
 
 # -------------------- Create New Budget --------------------
-if st.button("Create New Budget"):
-    st.session_state.budget_create_clicked = not(st.session_state.budget_create_clicked)
+# if st.button("Create New Budget"):
+#     st.session_state.budget_create_clicked = not(st.session_state.budget_create_clicked)
 
-if st.session_state.budget_create_clicked:
-    budget_category = st.text_input("Budget Category", key="budget_category")
-    budget_amount = st.number_input("Budget Amount", min_value=0.01, key="budget_amount")
+# if st.session_state.budget_create_clicked:
+#     budget_category = st.text_input("Budget Category", key="budget_category")
+#     budget_amount = st.number_input("Budget Amount", min_value=0.01, key="budget_amount")
 
-    if st.button("Submit Budget"):
-        response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": budget_category, "budget_amount": budget_amount})
-        if response.status_code == 201:
-            st.success("Budget created successfully!")
-        else:
-            st.error("Failed to create budget.")
+#     if st.button("Submit Budget"):
+#         response = requests.post(f"http://localhost:8000/budgets/{user_id}", json={"category": budget_category, "budget_amount": budget_amount})
+#         if response.status_code == 201:
+#             st.success("Budget created successfully!")
+#         else:
+#             st.error("Failed to create budget.")
 
 
 
 # -------------------- Update Budget --------------------
-if st.button("Update Budget"):
-    st.session_state.budget_update_clicked = not(st.session_state.budget_update_clicked)
+# if st.button("Update Budget"):
+#     st.session_state.budget_update_clicked = not(st.session_state.budget_update_clicked)
 
-if st.session_state.budget_update_clicked:
-    # Fetch budget categories from backend
-    response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
-    if response.status_code == 200:
-        categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
-        category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+# if st.session_state.budget_update_clicked:
+#     # Fetch budget categories from backend
+#     response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+#     if response.status_code == 200:
+#         categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+#         category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
 
-        # Dropdown for category selection
-        selected_category = st.selectbox("Select Category", options=list(category_options.keys()), key="selected_category")
+#         # Dropdown for category selection
+#         selected_category = st.selectbox("Select Category", options=list(category_options.keys()), key="selected_category")
 
-        # Get the corresponding budget ID
-        budget_id_to_update = category_options[selected_category]
-    else:
-        st.error("Failed to fetch budget categories.")
-        category_options = {}
-        budget_id_to_update = None
+#         # Get the corresponding budget ID
+#         budget_id_to_update = category_options[selected_category]
+#     else:
+#         st.error("Failed to fetch budget categories.")
+#         category_options = {}
+#         budget_id_to_update = None
 
-    new_budget_amount = st.number_input("New Budget Amount", min_value=0.01, key="new_budget_amount")
+#     new_budget_amount = st.number_input("New Budget Amount", min_value=0.01, key="new_budget_amount")
 
-    if st.button("Submit Update") and budget_id_to_update is not None:
-        payload = {"new_amount": new_budget_amount}  # Matches the Pydantic model
-        response = requests.put(
-            f"http://localhost:8000/budgets/{budget_id_to_update}", json=payload
-        )
-        if response.status_code == 200:
-            st.success("Budget updated successfully!")
-            st.rerun()
-        else:
-            st.error(f"Failed to update budget. Server response: {response.text}")
+#     if st.button("Submit Update") and budget_id_to_update is not None:
+#         payload = {"new_amount": new_budget_amount}  # Matches the Pydantic model
+#         response = requests.put(
+#             f"http://localhost:8000/budgets/{budget_id_to_update}", json=payload
+#         )
+#         if response.status_code == 200:
+#             st.success("Budget updated successfully!")
+#             st.rerun()
+#         else:
+#             st.error(f"Failed to update budget. Server response: {response.text}")
 
 
 # -------------------- Delete Budget --------------------
-if st.button("Delete Budget"):
-    st.session_state.budget_delete_clicked = not(st.session_state.budget_delete_clicked)
+# if st.button("Delete Budget"):
+#     st.session_state.budget_delete_clicked = not(st.session_state.budget_delete_clicked)
 
-if st.session_state.budget_delete_clicked:
-    # Fetch budget categories
-    response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
-    if response.status_code == 200:
-        categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
-        category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
-    else:
-        st.error("Failed to fetch budget categories.")
-        category_options = {}
+# if st.session_state.budget_delete_clicked:
+#     # Fetch budget categories
+#     response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+#     if response.status_code == 200:
+#         categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+#         category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+#     else:
+#         st.error("Failed to fetch budget categories.")
+#         category_options = {}
 
-    if category_options:
-        selected_category = st.selectbox("Select Category to Delete", options=list(category_options.keys()), key="category_delete")
-        budget_id_to_delete = category_options[selected_category]
+#     if category_options:
+#         selected_category = st.selectbox("Select Category to Delete", options=list(category_options.keys()), key="category_delete")
+#         budget_id_to_delete = category_options[selected_category]
 
-        if st.button("Confirm Deletion"):
-            response = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
-            if response.status_code == 200:
-                st.success("Budget deleted successfully!")
-                st.rerun()
-            else:
-                st.error(f"Failed to delete budget. Server response: {response.text}")
-
-
+#         if st.button("Confirm Deletion"):
+#             response = requests.delete(f"http://localhost:8000/budgets/{budget_id_to_delete}")
+#             if response.status_code == 200:
+#                 st.success("Budget deleted successfully!")
+#                 st.rerun()
+#             else:
+#                 st.error(f"Failed to delete budget. Server response: {response.text}")
 
 
-# Add Debt
-if st.button("Add Debt"):
-    st.session_state.add_debt_clicked = not st.session_state.get("add_debt_clicked", False)
-
-if st.session_state.get("add_debt_clicked", False):
-    debt_category = st.text_input("Debt Category", key="debt_category")
-    debt_amount = st.number_input("Debt Amount", min_value=0.01, key="debt_amount")
-    date_incurred = st.date_input("Date Incurred", datetime.date.today(), key="date_incurred")  # Add date input
 
 
-    if st.button("Submit Debt"):
-        response = requests.post(f"http://localhost:8000/debts/{user_id}", json={"category": debt_category, "amount": debt_amount, "date_incurred":str(date_incurred)})
-        if response.status_code == 201:
-            st.success("Debt added successfully!")
-            st.rerun()
-        else:
-            st.error("Failed to add debt.")
+# # Add Debt
+# if st.button("Add Debt"):
+#     st.session_state.add_debt_clicked = not st.session_state.get("add_debt_clicked", False)
+
+# if st.session_state.get("add_debt_clicked", False):
+#     debt_category = st.text_input("Debt Category", key="debt_category")
+#     debt_amount = st.number_input("Debt Amount", min_value=0.01, key="debt_amount")
+#     date_incurred = st.date_input("Date Incurred", datetime.today(), key="date_incurred")  # Add date input
+
+
+#     if st.button("Submit Debt"):
+#         response = requests.post(f"http://localhost:8000/debts/{user_id}", json={"category": debt_category, "amount": debt_amount, "date_incurred":str(date_incurred)})
+#         if response.status_code == 201:
+#             st.success("Debt added successfully!")
+#             st.rerun()
+#         else:
+#             st.error("Failed to add debt.")
 
 
 
 # Delete Debt
-if st.button("Delete Debt"):
-    st.session_state.delete_debt_clicked = not st.session_state.get("delete_debt_clicked", False)
+# if st.button("Delete Debt"):
+#     st.session_state.delete_debt_clicked = not st.session_state.get("delete_debt_clicked", False)
 
-if st.session_state.get("delete_debt_clicked", False):
-    response = requests.get(f"http://localhost:8000/debts/{user_id}")
-    if response.status_code == 200:
-        debts = response.json()  # Expecting [{"id": 1, "category": "Credit Card"}, ...]
-        debt_options = {d["category"]: d["id"] for d in debts}  # Map category to ID
-    else:
-        st.error("Failed to fetch debts.")
-        debt_options = {}
+# if st.session_state.get("delete_debt_clicked", False):
+#     response = requests.get(f"http://localhost:8000/debts/{user_id}")
+#     if response.status_code == 200:
+#         debts = response.json()  # Expecting [{"id": 1, "category": "Credit Card"}, ...]
+#         debt_options = {d["category"]: d["id"] for d in debts}  # Map category to ID
+#     else:
+#         st.error("Failed to fetch debts.")
+#         debt_options = {}
 
-    selected_debt = st.selectbox("Select Debt to Delete", options=list(debt_options.keys()))
+#     selected_debt = st.selectbox("Select Debt to Delete", options=list(debt_options.keys()))
 
-    if st.button("Confirm Deletion"):
-        debt_id_to_delete = debt_options[selected_debt]
-        response = requests.delete(f"http://localhost:8000/debts/{debt_id_to_delete}")
-        if response.status_code == 200:
-            st.success("Debt deleted successfully!")
-            st.rerun()
-        else:
-            st.error("Failed to delete debt.")
-
-
-# Add asset
-if st.button("Add Asset"):
-    st.session_state.add_asset_clicked = not st.session_state.get("add_asset_clicked", False)
-
-if st.session_state.get("add_asset_clicked", False):
-    asset_category = st.text_input("Asset Category", key="asset_category")
-    asset_value = st.number_input("Asset Value", min_value=0.01, key="asset_value")
-    date_asset_added=st.date_input("Date Incurred", datetime.date.today(), key="date_asset_added")
-    if st.button("Submit Asset"):
-        response = requests.post(f"http://localhost:8000/assets/{user_id}", json={"category": asset_category, "value": asset_value,"date_added":str(date_asset_added)})
-        if response.status_code == 201:
-            st.success("Asset added successfully!")
-            st.rerun()
-        else:
-            st.error("Failed to add asset.")
+#     if st.button("Confirm Deletion"):
+#         debt_id_to_delete = debt_options[selected_debt]
+#         response = requests.delete(f"http://localhost:8000/debts/{debt_id_to_delete}")
+#         if response.status_code == 200:
+#             st.success("Debt deleted successfully!")
+#             st.rerun()
+#         else:
+#             st.error("Failed to delete debt.")
 
 
+# # Add asset
+# if st.button("Add Asset"):
+#     st.session_state.add_asset_clicked = not st.session_state.get("add_asset_clicked", False)
 
-# Delete Asset
-if st.button("Delete Asset"):
-    st.session_state.delete_asset_clicked = not st.session_state.get("delete_asset_clicked", False)
+# if st.session_state.get("add_asset_clicked", False):
+#     asset_category = st.text_input("Asset Category", key="asset_category")
+#     # asset_value = st.number_input("Asset Value", min_value=0.01, key="asset_value")
+#     asset_value = st.number_input("Asset Value", key="asset_value")
+#     date_asset_added=st.date_input("Date Incurred", datetime.today(), key="date_asset_added")
+#     if st.button("Submit Asset"):
+#         response = requests.post(f"http://localhost:8000/assets/{user_id}", json={"category": asset_category, "value": asset_value,"date_added":str(date_asset_added)})
+#         if response.status_code == 201:
+#             st.success("Asset added successfully!")
+#             st.rerun()
+#         else:
+#             st.error("Failed to add asset.")
 
-if st.session_state.get("delete_asset_clicked", False):
-    response = requests.get(f"http://localhost:8000/assets/{user_id}")
-    if response.status_code == 200:
-        assets = response.json()  # Expecting [{"id": 1, "category": "Savings"}, ...]
-        asset_options = {a["category"]: a["id"] for a in assets}  # Map category to ID
-    else:
-        st.error("Failed to fetch assets.")
-        asset_options = {}
 
-    selected_asset = st.selectbox("Select Asset to Delete", options=list(asset_options.keys()))
 
-    if st.button("Confirm Deletion"):
-        asset_id_to_delete = asset_options[selected_asset]
-        response = requests.delete(f"http://localhost:8000/assets/{asset_id_to_delete}")
-        if response.status_code == 200:
-            st.success("Asset deleted successfully!")
-            st.rerun()
-        else:
-            st.error("Failed to delete asset.")
+# # Delete Asset
+# if st.button("Delete Asset"):
+#     st.session_state.delete_asset_clicked = not st.session_state.get("delete_asset_clicked", False)
+
+# if st.session_state.get("delete_asset_clicked", False):
+#     response = requests.get(f"http://localhost:8000/assets/{user_id}")
+#     if response.status_code == 200:
+#         assets = response.json()  # Expecting [{"id": 1, "category": "Savings"}, ...]
+#         asset_options = {a["category"]: a["id"] for a in assets}  # Map category to ID
+#     else:
+#         st.error("Failed to fetch assets.")
+#         asset_options = {}
+
+#     selected_asset = st.selectbox("Select Asset to Delete", options=list(asset_options.keys()))
+
+#     if st.button("Confirm Deletion"):
+#         asset_id_to_delete = asset_options[selected_asset]
+#         response = requests.delete(f"http://localhost:8000/assets/{asset_id_to_delete}")
+#         if response.status_code == 200:
+#             st.success("Asset deleted successfully!")
+#             st.rerun()
+#         else:
+#             st.error("Failed to delete asset.")
 
 
 

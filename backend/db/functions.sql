@@ -1,97 +1,3 @@
--- Function to calculate the total expenses for a user
-CREATE OR REPLACE FUNCTION get_total_expenses(user_id_param INT)
-RETURNS DECIMAL AS $$
-DECLARE
-    total DECIMAL;
-BEGIN
-    SELECT COALESCE(SUM(amount), 0) INTO total
-    FROM expenses
-    WHERE user_id = user_id_param;
-    
-    RETURN total;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to calculate the total income for a user
-CREATE OR REPLACE FUNCTION get_total_income(user_id_param INT)
-RETURNS DECIMAL AS $$
-DECLARE
-    total_income DECIMAL;
-BEGIN
-    SELECT COALESCE(SUM(amount), 0) INTO total_income
-    FROM income
-    WHERE user_id = user_id_param;
-
-    RETURN total_income;
-END;
-$$ LANGUAGE plpgsql;
-
-
-
-
--- Function to calculate net savings for a user
-CREATE OR REPLACE FUNCTION get_net_savings(user_id_param INT)
-RETURNS DECIMAL AS $$
-DECLARE
-    expenses DECIMAL;
-    income DECIMAL;
-BEGIN
-    expenses := get_total_expenses(user_id_param);
-    income := get_total_income(user_id_param);
-    
-    RETURN income - expenses;
-END;
-$$ LANGUAGE plpgsql;
-
-
--- Function to calculate expense breakdown by category
-CREATE OR REPLACE FUNCTION get_expense_breakdown(user_id_param INT)
-RETURNS TABLE(category TEXT, total DECIMAL) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT e.category::TEXT, COALESCE(SUM(e.amount), 0) AS total  -- Cast to TEXT
-    FROM expenses e
-    WHERE e.user_id = user_id_param
-    GROUP BY e.category
-    ORDER BY total DESC;
-END;
-$$ LANGUAGE plpgsql;
-
-
-
-CREATE OR REPLACE FUNCTION get_savings_recommendations(user_id_param INT)
-RETURNS TABLE(recommendation TEXT) AS $$
-BEGIN
-    RETURN QUERY 
-    SELECT CASE 
-               WHEN (SELECT SUM(amount) FROM expenses WHERE user_id = user_id_param) > 
-                    (SELECT SUM(amount) FROM income WHERE user_id = user_id_param) THEN 
-                   'Consider reducing your discretionary spending.'
-               ELSE 
-                   'You are within your budget; keep saving!'
-           END AS recommendation;
-END;
-$$ LANGUAGE plpgsql;
-
-
-
-CREATE OR REPLACE FUNCTION get_financial_health_score(user_id_param INT)
-RETURNS TABLE(score INT) AS $$
-BEGIN
-   RETURN QUERY 
-   SELECT CASE 
-              WHEN (SELECT SUM(amount) FROM income WHERE user_id = user_id_param) - 
-                   (SELECT SUM(amount) FROM expenses WHERE user_id = user_id_param) > 1000 THEN 
-                   5 -- Excellent health score
-              WHEN (SELECT SUM(amount) FROM income WHERE user_id = user_id_param) - 
-                   (SELECT SUM(amount) FROM expenses WHERE user_id = user_id_param) BETWEEN 500 AND 1000 THEN 
-                   4 -- Good health score
-              ELSE 
-                   3 -- Needs improvement score
-          END AS score;
-END;
-$$ LANGUAGE plpgsql;
-
 
 
 CREATE OR REPLACE FUNCTION populate_income_expense_summary(uid INT) RETURNS INT AS $$
@@ -153,17 +59,19 @@ $$ LANGUAGE plpgsql;
 
 
 
-CREATE OR REPLACE FUNCTION get_total_assets(p_user_id INT) 
-RETURNS NUMERIC AS $$
-DECLARE 
-    total_assets NUMERIC;
+CREATE OR REPLACE FUNCTION get_assets_by_category(p_user_id INT) 
+RETURNS TABLE(category VARCHAR(50), total_value NUMERIC) AS $$
 BEGIN
-    SELECT COALESCE(SUM(value), 0) INTO total_assets 
-    FROM assets WHERE user_id = p_user_id;
-    
-    RETURN total_assets;
+    RETURN QUERY
+    SELECT a.category, COALESCE(SUM(a.value), 0) AS total_value
+    FROM assets AS a
+    WHERE a.user_id = p_user_id
+    GROUP BY a.category;
 END;
 $$ LANGUAGE plpgsql;
+
+
+
 
 
 
@@ -174,13 +82,19 @@ DECLARE
     total_liabilities NUMERIC;
     net_worth NUMERIC;
 BEGIN
-    SELECT get_total_assets(p_user_id) INTO total_assets;
+    -- Calculate total assets by summing up category-wise asset values
+    SELECT COALESCE(SUM(total_value), 0) INTO total_assets
+    FROM get_assets_by_category(p_user_id);
+
+    -- Get total liabilities
     SELECT get_total_liabilities(p_user_id) INTO total_liabilities;
     
+    -- Compute net worth
     net_worth := total_assets - total_liabilities;
     
     RETURN net_worth;
 END;
 $$ LANGUAGE plpgsql;
+
 
 -- psql -U your_username -d db_name -a -f backend/db/functions.sql

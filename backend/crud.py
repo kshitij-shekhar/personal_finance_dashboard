@@ -4,6 +4,9 @@ from backend.models import User, Expense, Income, Budget
 from backend.models import Debt, Asset
 from datetime import date
 from sqlalchemy.exc import SQLAlchemyError
+import logging
+
+
 
 # User CRUD Operations
 def create_user(db: Session, username: str, password: str):
@@ -12,6 +15,10 @@ def create_user(db: Session, username: str, password: str):
     db.commit()
     db.refresh(new_user)
     return new_user
+
+def update_savings(db: Session, user_id: int):
+    db.execute(text("CALL update_savings(:user_id_param)"), {"user_id_param": user_id})
+    db.commit()
 
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
@@ -173,6 +180,19 @@ def get_debts_by_user(db: Session, user_id: int):
     except SQLAlchemyError as e:
         raise Exception(f"Error fetching debts: {str(e)}")
 
+# def add_asset_db(db: Session, user_id: int, category: str, value: float, date_added: date):
+#     try:
+#         new_asset = Asset(user_id=user_id, category=category, value=value, date_added=date_added)
+#         db.add(new_asset)
+#         db.commit()
+#         db.refresh(new_asset)
+#         return new_asset
+#     except SQLAlchemyError as e:
+#         db.rollback()
+#         raise Exception(f"Error adding asset: {str(e)}")
+
+logging.basicConfig(level=logging.ERROR)
+
 def add_asset_db(db: Session, user_id: int, category: str, value: float, date_added: date):
     try:
         new_asset = Asset(user_id=user_id, category=category, value=value, date_added=date_added)
@@ -182,7 +202,10 @@ def add_asset_db(db: Session, user_id: int, category: str, value: float, date_ad
         return new_asset
     except SQLAlchemyError as e:
         db.rollback()
+        logging.error(f"Database error: {str(e)}")  # Log the actual SQL error
         raise Exception(f"Error adding asset: {str(e)}")
+
+
 
 def delete_asset_db(db: Session, asset_id: int):
     try:
