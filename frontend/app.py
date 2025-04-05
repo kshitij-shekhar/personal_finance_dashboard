@@ -876,6 +876,39 @@ else:
     with col_right2:
         display_net_worth_tracker(user_id)
         # -------------------- Delete Budget --------------------
+
+        # if st.button("Delete Budget"):
+        #     st.session_state.budget_delete_clicked = not(st.session_state.budget_delete_clicked)
+
+        # if st.session_state.budget_delete_clicked:
+        #     # Fetch budget categories
+        #     response = requests.get(f"http://localhost:8000/budgets/{user_id}")  
+        #     if response.status_code == 200:
+        #         categories = response.json()  # Expecting a list of dicts: [{"id": 1, "category": "Food"}, ...]
+        #         category_options = {c["category"]: c["id"] for c in categories}  # Create a mapping of category name to ID
+        #     else:
+        #         st.error("Failed to fetch budget categories.")
+        #         category_options = {}
+
+        #     if category_options:
+        #         selected_category = st.selectbox("Select Category to Delete", options=list(category_options.keys()), key="category_delete")
+        #         budget_id_to_delete = category_options[selected_category]
+
+        #         # Get current year and month
+        #         current_year = datetime.today().year
+        #         current_month = datetime.today().month
+
+        #         if st.button("Confirm Deletion"):
+        #             response = requests.delete(
+        #                 f"http://localhost:8000/budgets/{budget_id_to_delete}",
+        #                 params={"year": current_year, "month": current_month}  # Send year and month as query params
+        #             )
+        #             if response.status_code == 200:
+        #                 st.success("Budget deleted successfully!")
+        #                 st.rerun()
+        #             else:
+        #                 st.error(f"Failed to delete budget. Server response: {response.text}")
+
         if st.button("Delete Budget"):
             st.session_state.budget_delete_clicked = not(st.session_state.budget_delete_clicked)
 
@@ -920,7 +953,8 @@ else:
                     st.success("Asset added successfully!")
                     st.rerun()
                 else:
-                    st.error("Failed to add asset.")
+                    error_message = response.json().get("detail", "Failed to add asset.")  # Extract error detail
+                    st.error(error_message)
 
         # Delete Asset
         if st.button("Delete Asset"):

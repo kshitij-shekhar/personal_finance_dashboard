@@ -37,6 +37,7 @@
 -- This trigger is fired when an income is deleted
 -- The income in the income table is deleted, and the total_income in income_expense_summary table 
 -- is reduced by <income> amount
+
 CREATE OR REPLACE FUNCTION update_income_summary()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -71,7 +72,9 @@ AFTER INSERT OR UPDATE OR DELETE ON income
 FOR EACH ROW EXECUTE FUNCTION update_income_summary();
 
 
--- Trigger for Expense Updates
+-- This trigger is fired when an expense is deleted
+-- The expense in the expense table is deleted, and the total_expense in income_expense_summary table 
+-- is reduced by <expense> amount
 CREATE OR REPLACE FUNCTION update_expense_summary()
 RETURNS TRIGGER AS $$
 BEGIN

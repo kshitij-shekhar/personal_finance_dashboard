@@ -111,6 +111,21 @@ def delete_budget_db(db: Session, budget_id: int):
     db.delete(budget)
     db.commit()
 
+
+# def delete_budget_db(db: Session, budget_id: int, year: int, month: int):
+#     budget = db.query(Budget).filter(
+#         Budget.id == budget_id,
+#         Budget.year == year,
+#         Budget.month == month
+#     ).first()
+
+#     if not budget:
+#         raise Exception("Budget not found for the specified month.")
+
+#     db.delete(budget)
+#     db.commit()
+
+
 # Financial Summary Operations
 def get_financial_summary_db(db: Session, user_id: int):
     result = db.execute(

@@ -1,5 +1,5 @@
 
-
+-- Updates income_expense_summary whenever called(during login, and when something is added/deleted)
 CREATE OR REPLACE FUNCTION populate_income_expense_summary(uid INT) RETURNS INT AS $$
 DECLARE
     affected_rows INT;

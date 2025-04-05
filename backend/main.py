@@ -192,6 +192,14 @@ def delete_budget(budget_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
     
+# @app.delete("/budgets/{budget_id}")
+# def delete_budget(budget_id: int, year: int, month: int, db: Session = Depends(get_db)):
+#     try:
+#         crud.delete_budget_db(db=db, budget_id=budget_id, year=year, month=month)
+#         return {"message": "Budget deleted successfully"}
+#     except Exception as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+
 
 
 @app.get("/budgets/{user_id}")
